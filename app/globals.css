@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+:root {
+  --color-navy: #0b1f35;
+  --color-navy-2: #12293f;
+  --color-gold: #c9852a;
+  --color-gold-light: #e0a750;
+  --color-steel: #5b6b7c;
+  --color-bg: #f6f7f9;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: #16212e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: var(--color-gold-light);
+  color: #16212e;
+}
+
+.font-display {
+  font-family: Georgia, "Cambria", "Times New Roman", serif;
+}
