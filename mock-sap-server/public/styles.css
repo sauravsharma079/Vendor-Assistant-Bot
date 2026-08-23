@@ -1,0 +1,241 @@
+* { box-sizing: border-box; }
+
+:root {
+  --sap-shell-bg: #354a5f;
+  --sap-brand: #0070f2;
+  --sap-brand-dark: #0054a1;
+  --sap-bg: #f7f7f7;
+  --sap-content-bg: #ffffff;
+  --sap-border: #e5e5e5;
+  --sap-text: #1d2d3e;
+  --sap-text-secondary: #6a6d70;
+
+  --sap-positive: #107e3e;
+  --sap-critical: #e76500;
+  --sap-negative: #bb0000;
+  --sap-neutral: #6a6d70;
+  --sap-informative: #0070f2;
+}
+
+body {
+  margin: 0;
+  font-family: "72", "72full", "Segoe UI", Arial, Helvetica, sans-serif;
+  background: var(--sap-bg);
+  color: var(--sap-text);
+  font-size: 14px;
+}
+
+/* Shell bar */
+.shellbar {
+  height: 44px;
+  background: var(--sap-shell-bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+  color: #fff;
+}
+
+.shellbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shellbar-logo {
+  width: 26px;
+  height: 26px;
+  background: var(--sap-brand);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+}
+
+.shellbar-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.shellbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.shellbar-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #5a7a9a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* App header */
+.app-header {
+  background: var(--sap-content-bg);
+  padding: 16px 24px 0;
+  border-bottom: 1px solid var(--sap-border);
+}
+
+.app-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.app-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--sap-text);
+}
+
+.app-subtitle {
+  font-size: 12px;
+  color: var(--sap-text-secondary);
+  margin-top: 3px;
+}
+
+.filter-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-field label {
+  font-size: 12px;
+  color: var(--sap-text-secondary);
+  white-space: nowrap;
+}
+
+.filter-field input {
+  background: #fff;
+  border: 1px solid #89919a;
+  border-radius: 2px;
+  padding: 6px 10px;
+  font-size: 13px;
+  width: 240px;
+  color: var(--sap-text);
+}
+
+.filter-field input:focus {
+  outline: 2px solid var(--sap-brand);
+  outline-offset: -1px;
+  border-color: var(--sap-brand);
+}
+
+/* Icon tab bar */
+.tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.tab {
+  padding: 10px 16px 12px;
+  cursor: pointer;
+  color: var(--sap-text-secondary);
+  font-size: 13.5px;
+  border-bottom: 3px solid transparent;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.tab:hover {
+  color: var(--sap-text);
+  background: #fafafa;
+}
+
+.tab.active {
+  color: var(--sap-brand);
+  border-bottom-color: var(--sap-brand);
+  font-weight: 600;
+}
+
+/* Main content */
+main {
+  padding: 20px 24px 48px;
+}
+
+.empty {
+  color: var(--sap-text-secondary);
+  padding: 48px 0;
+  text-align: center;
+  background: var(--sap-content-bg);
+  border: 1px solid var(--sap-border);
+}
+
+.count {
+  color: var(--sap-text-secondary);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  background: var(--sap-content-bg);
+  border: 1px solid var(--sap-border);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background: #fafafa;
+  text-align: left;
+  padding: 10px 12px;
+  color: var(--sap-text);
+  font-weight: 600;
+  border-bottom: 2px solid var(--sap-border);
+  white-space: nowrap;
+}
+
+tbody td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--sap-border);
+  white-space: nowrap;
+  color: var(--sap-text);
+}
+
+tbody tr:hover {
+  background: #f5faff;
+}
+
+/* Object status (Fiori semantic colors) */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.status-positive { color: var(--sap-positive); }
+.status-critical { color: var(--sap-critical); }
+.status-negative { color: var(--sap-negative); }
+.status-neutral { color: var(--sap-neutral); }
+.status-informative { color: var(--sap-informative); }

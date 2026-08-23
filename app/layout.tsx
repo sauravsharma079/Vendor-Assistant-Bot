@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Vendor Query Assistant | Manufacturing AP Self-Service",
   description:
-    "Self-service invoice status, payment status, and Form 16 resolution for manufacturing suppliers, backed by SAP S/4HANA.",
+    "Self-service invoice status, payment status, and Form 16A / Form 26AS / TDS resolution for manufacturing suppliers, backed by SAP S/4HANA.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

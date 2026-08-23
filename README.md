@@ -1,14 +1,26 @@
 # Vendor Query Assistant
 
 Self-service bot for manufacturing suppliers to check **invoice status**,
-**payment status**, and **Form 16 / TDS certificates** without emailing or
-calling business support — built for the Kyndryl vendor query resolution
-use case. Standalone codebase, independent of the Veltriance SaaS platform.
+**payment status**, **Form 16 / TDS certificates**, and download a full
+**account statement** (Excel, invoices + payments for a date range) —
+without emailing or calling business support. Built for the Kyndryl vendor
+query resolution use case. Standalone codebase, independent of the
+Veltriance SaaS platform.
 
-**No mock, seeded, or hardcoded data anywhere.** Every answer comes from
-a live OData call to a connected SAP S/4HANA tenant. If SAP isn't
+**No mock, seeded, or hardcoded data in production.** Every answer comes
+from a live OData call to a connected SAP S/4HANA tenant. If SAP isn't
 configured, or a record doesn't exist, the app says so explicitly rather
-than fabricating a response.
+than fabricating a response. The one exception is `SAP_MODE=mock`, an
+explicit local-dev-only flag that routes to a standalone fake SAP
+(`mock-sap-server/`) for testing without a real tenant — see "Local mock
+SAP (dev only)" below. It's hard-blocked whenever `NODE_ENV=production`.
+
+**Vendors can also just type a question instead of using the menu.** An
+optional free-tier LLM (Groq, `GROQ_API_KEY` in `.env.local`) classifies
+the question and rewords the answer, but the answer itself always still
+comes from the same `resolveQuery()` SAP lookup the menu-driven flow
+uses — the model never generates a fact on its own. Leave `GROQ_API_KEY`
+unset and the menu-driven flow works exactly as before.
 
 **Every supplier can only ever see their own data.** See "Onboarding &
 data isolation" below for how this is enforced.
@@ -114,6 +126,23 @@ Run `npm run verify:sap` against the real sandbox to check all four
 before a demo — it authenticates and probes each path, and tells you
 exactly which env var to set if one doesn't resolve.
 
+## Local mock SAP (dev only)
+
+For local development without a real SAP tenant, set `SAP_MODE=mock` in
+`.env.local` (see `.env.example`) to route every SAP call to
+[`mock-sap-server/`](mock-sap-server/) — a standalone fake SAP REST API +
+admin UI with fabricated suppliers, invoices, payments, and Form 16 data.
+
+1. `cd mock-sap-server && npm install && npm start` (serves on `:4001`)
+2. In this app's `.env.local`: `SAP_MODE=mock` and `MOCK_SAP_BASE_URL=http://localhost:4001`
+3. `npm run dev` as usual — queries now resolve against the mock data instead of live SAP
+
+This is wired through `lib/sap/mock-connector.ts`, selected in
+`lib/sap/index.ts` only when `SAP_MODE=mock` is explicitly set, and hard-
+blocked whenever `NODE_ENV=production` — it cannot end up in front of a
+real vendor no matter what gets deployed. Leave `SAP_MODE` unset (the
+default) to use the real connector.
+
 ### OTP delivery
 
 - `EMAIL_MODE=console` (default outside production) prints the OTP to
@@ -143,6 +172,9 @@ app/
     admin-auth/logout/route.ts     Clear admin session
     admin-auth/me/route.ts          Admin session check
     query/route.ts                 Session-gated: resolve/escalate a query
+    ai-query/route.ts               Session-gated: free-text alternative to
+                                    query/route.ts — same resolveQuery(),
+                                    LLM only classifies intent + rewords
     tickets/route.ts               GET/PATCH: exception ticket queue (admin-gated)
     query-log/route.ts             GET: full query history (admin-gated)
     audit-log/route.ts             GET: compliance audit trail (admin-gated)
@@ -152,9 +184,12 @@ lib/
     types.ts                     SapConnector interface
     s4hana-connector.ts           Real OData calls to SAP S/4HANA Cloud,
                                   OAuth2 client-credentials auth, env-var-
-                                  overridable service paths — the only
-                                  connector, no fallback data
-    index.ts                      getSapConnector() entry point
+                                  overridable service paths — the default
+                                  and only connector in production
+    mock-connector.ts             Dev-only: calls mock-sap-server instead
+                                  of live SAP, used only when SAP_MODE=mock
+    index.ts                      getSapConnector() entry point — the
+                                  SAP_MODE switch, blocked in production
   auth/
     otp-store.ts                  OTP challenges, PAN attempt lockout
     admin-lockout.ts               Admin password attempt lockout (by IP)
@@ -165,6 +200,12 @@ lib/
   privacy/mask.ts                 PAN/GSTIN/email masking helpers
   resolver.ts                     Core logic: SAP lookup -> auto-resolve
                                   or escalate -> log everything
+  llm/
+    groq.ts                        Groq free-tier chat completion client
+    vendor-assistant.ts             parseVendorIntent() (free text -> query
+                                    type + reference) and phraseResponse()
+                                    (rewords an already-fetched, already-
+                                    correct summary — never generates facts)
   store/                          File-backed store for tickets, query
                                   log, audit log (swap for a real
                                   database before production use)

@@ -9,8 +9,8 @@ import type {
 /**
  * RealS4HanaConnector \u2014 talks to a live SAP S/4HANA Cloud tenant over
  * OData v2/v4, using OAuth2 client-credentials auth via a Communication
- * Arrangement. This is the ONLY connector the app uses; there is no
- * mock/demo data anywhere in this codebase.
+ * Arrangement. This is the default and only connector used in production;
+ * see lib/sap/index.ts for the SAP_MODE=mock dev-only exception.
  *
  * --------------------------------------------------------------------
  * ONE-TIME SETUP IN THE SAP TENANT (Fiori apps, done by whoever has
@@ -343,6 +343,48 @@ export class RealS4HanaConnector implements SapConnector {
       };
     } catch (err) {
       if (err instanceof SapRequestError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
+  async listInvoices(vendorCode: string, dateFrom?: string, dateTo?: string): Promise<InvoiceStatusResult[]> {
+    // Same service/fields as getInvoiceStatus, filtered by vendor + an
+    // optional DocumentDate range instead of a specific document number.
+    // OData date literals need SAP's datetime'...' format; confirm the
+    // exact filter syntax this tenant's release expects once connected.
+    try {
+      let filter = `InvoicingParty eq '${encodeURIComponent(vendorCode.trim())}'`;
+      if (dateFrom) filter += ` and DocumentDate ge datetime'${dateFrom}T00:00:00'`;
+      if (dateTo) filter += ` and DocumentDate le datetime'${dateTo}T00:00:00'`;
+
+      const data = await sapGet<{
+        d: {
+          results: Array<{
+            SupplierInvoice: string;
+            PurchasingDocument: string;
+            DocumentDate: string;
+            InvoicingParty: string;
+            IsInvoiceBlocked: boolean;
+            GoodsReceiptBasedInvVerf?: boolean;
+            InvoiceGrossAmount: string;
+            DocumentCurrency: string;
+          }>;
+        };
+      }>(`${SAP_SERVICE_PATHS.invoice}?$filter=${filter}&$format=json`);
+
+      return data.d.results.map((inv) => ({
+        invoiceNo: inv.SupplierInvoice,
+        poNumber: inv.PurchasingDocument,
+        postingDate: inv.DocumentDate,
+        grnMatched: !!inv.GoodsReceiptBasedInvVerf,
+        grnNumber: null,
+        approvalStatus: inv.IsInvoiceBlocked ? "Blocked" : "Approved",
+        blockReason: inv.IsInvoiceBlocked ? "Invoice is blocked — see SAP for release reason" : null,
+        amount: parseFloat(inv.InvoiceGrossAmount),
+        currency: inv.DocumentCurrency,
+      }));
+    } catch (err) {
+      if (err instanceof SapRequestError && err.status === 404) return [];
       throw err;
     }
   }

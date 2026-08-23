@@ -1,24 +1,53 @@
 import { getSapConnector } from "@/lib/sap";
 import { SapNotConfiguredError, SapRequestError } from "@/lib/sap/s4hana-connector";
-import type { QueryType, VendorIdentity } from "@/lib/sap/types";
+import type { QueryType, VendorIdentity, InvoiceStatusResult, PaymentStatusResult } from "@/lib/sap/types";
 import { addQueryLogEntry, addTicket, addAuditEntry } from "@/lib/store";
+
+import { formatTicketReference } from "@/lib/ticket-ref";
 
 const SLA_HOURS_BY_TYPE: Record<QueryType, number> = {
   invoice_status: 24,
   payment_status: 24,
   form16: 48,
+  account_statement: 24,
 };
 
 export interface ResolveParams {
   vendor: Pick<VendorIdentity, "vendorCode" | "vendorName" | "email">;
   queryType: QueryType;
-  reference: string; // invoice/PO number, or financial year for form16
+  // invoice/PO number, financial year for form16, or "YYYY-MM-DD:YYYY-MM-DD"
+  // for account_statement (defaults to the current FY if omitted/unparseable)
+  reference: string;
+}
+
+export interface AgingBucket {
+  bucket: string;
+  count: number;
+  amount: number;
 }
 
 export type ResolveResult =
   | { kind: "resolved"; summary: string; data: unknown }
   | { kind: "escalated"; summary: string; ticketId: string; slaDueAt: string }
-  | { kind: "system_error"; message: string };
+  | { kind: "system_error"; message: string }
+  | {
+      kind: "statement";
+      summary: string;
+      dateFrom: string;
+      dateTo: string;
+      currency: string;
+      invoices: InvoiceStatusResult[];
+      payments: PaymentStatusResult[];
+      // Outstanding = not yet Cleared. "This month"/"this quarter" use each
+      // invoice's scheduled payment date if one exists, else its posting
+      // date — the data model has no separate due-date field to go by.
+      agingSummary: AgingBucket[];
+      totalOutstanding: number;
+      totalPayableThisMonth: number;
+      totalPayableThisQuarter: number;
+      paidInvoices: (InvoiceStatusResult & { paymentDate: string | null })[];
+      pendingApprovalInvoices: InvoiceStatusResult[];
+    };
 
 export async function resolveQuery(params: ResolveParams): Promise<ResolveResult> {
   const started = Date.now();
@@ -37,6 +66,8 @@ export async function resolveQuery(params: ResolveParams): Promise<ResolveResult
         return await resolvePayment(vendor, params.reference, started);
       case "form16":
         return await resolveForm16(vendor, params.reference, started);
+      case "account_statement":
+        return await resolveAccountStatement(vendor, params.reference, started);
     }
   } catch (err) {
     return sapErrorToResult(err);
@@ -83,12 +114,15 @@ async function escalate(
   const ticket = addTicket({
     vendorCode: vendor.vendorCode,
     vendorName: vendor.vendorName,
+    vendorEmail: vendor.email,
     queryType,
     reference: reference || null,
     reason,
     status: "open",
     slaDueAt,
     queryLogId: queryLogEntry.id,
+    resolutionNote: null,
+    assignee: null,
   });
 
   addAuditEntry({
@@ -97,12 +131,33 @@ async function escalate(
     details: `Ticket ${ticket.id} created for ${vendor.vendorName} (${queryType}): ${reason}`,
   });
 
+  const ticketRef = formatTicketReference(ticket.id);
+
   return {
     kind: "escalated",
-    summary: `I couldn't fully resolve this automatically \u2014 ${reason}. I've raised ticket ${ticket.id} for business support, due within ${slaHours}h.`,
-    ticketId: ticket.id,
+    summary:
+      `${reason} This has been escalated to our business support team for review ` +
+      `(reference ${ticketRef}), with a response expected within ${slaHours} hours.`,
+    ticketId: ticketRef,
     slaDueAt,
   };
+}
+
+// Called when a vendor already got an answer but still needs help with it
+// (e.g. "invoice status says approved but I haven't been paid") — reuses
+// the same escalate() path a failed lookup takes, just with the vendor's
+// own description as the reason instead of a system-detected one.
+export async function openFollowUpTicket(
+  vendorInput: Pick<VendorIdentity, "vendorCode" | "vendorName" | "email">,
+  queryType: QueryType,
+  reference: string,
+  description: string
+): Promise<{ summary: string; ticketId: string; slaDueAt: string }> {
+  const result = await escalate(vendorInput as VendorIdentity, queryType, reference, description, Date.now());
+  if (result.kind !== "escalated") {
+    throw new Error("escalate() unexpectedly returned a non-escalated result");
+  }
+  return { summary: result.summary, ticketId: result.ticketId, slaDueAt: result.slaDueAt };
 }
 
 async function resolveInvoice(vendor: VendorIdentity, reference: string, started: number): Promise<ResolveResult> {
@@ -115,20 +170,22 @@ async function resolveInvoice(vendor: VendorIdentity, reference: string, started
     return escalate(vendor, "invoice_status", reference, `Invoice/PO ${reference} not found in SAP`, started);
   }
 
+  const detail =
+    `Invoice ${invoice.invoiceNo} (PO ${invoice.poNumber}), posted on ${invoice.postingDate}. ` +
+    `Status: ${invoice.approvalStatus}. Goods Receipt: ${invoice.grnMatched ? `Matched (${invoice.grnNumber})` : "Not yet matched"}. ` +
+    `Amount: ${invoice.currency} ${invoice.amount.toLocaleString("en-IN")}.`;
+
   if (invoice.approvalStatus === "Blocked" || invoice.approvalStatus === "Rejected") {
     return escalate(
       vendor,
       "invoice_status",
       reference,
-      `Invoice ${invoice.invoiceNo} is ${invoice.approvalStatus.toLowerCase()}${invoice.blockReason ? ` (${invoice.blockReason})` : ""}`,
+      `${detail}${invoice.blockReason ? ` Reason: ${invoice.blockReason}.` : ""}`,
       started
     );
   }
 
-  const summary =
-    `Invoice ${invoice.invoiceNo} (PO ${invoice.poNumber}), posted ${invoice.postingDate}: ` +
-    `${invoice.approvalStatus}. GRN ${invoice.grnMatched ? `matched (${invoice.grnNumber})` : "not yet matched"}. ` +
-    `Amount ${invoice.currency} ${invoice.amount.toLocaleString("en-IN")}.`;
+  const summary = detail;
 
   addQueryLogEntry({
     vendorCode: vendor.vendorCode,
@@ -203,13 +260,13 @@ async function resolveForm16(vendor: VendorIdentity, reference: string, started:
 
   if (!cert || cert.status !== "Available") {
     const reason = !cert
-      ? `No Form 16 record found for FY ${financialYear}`
-      : `Form 16 for FY ${financialYear} ${cert.quarter} is ${cert.status.toLowerCase()}`;
+      ? `No Form 16A / Form 26AS / TDS record found for FY ${financialYear}`
+      : `Form 16A / Form 26AS / TDS for FY ${financialYear} ${cert.quarter} is ${cert.status.toLowerCase()}`;
     return escalate(vendor, "form16", reference, reason, started);
   }
 
   const summary =
-    `Form 16 (${cert.certificateNo}) for FY ${cert.financialYear} ${cert.quarter} is available. ` +
+    `Form 16A / Form 26AS / TDS (${cert.certificateNo}) for FY ${cert.financialYear} ${cert.quarter} is available. ` +
     `TDS amount: ${cert.currency} ${cert.tdsAmount.toLocaleString("en-IN")}. Download: ${cert.downloadUrl}`;
 
   addQueryLogEntry({
@@ -223,4 +280,120 @@ async function resolveForm16(vendor: VendorIdentity, reference: string, started:
   });
 
   return { kind: "resolved", summary, data: cert };
+}
+
+// India's financial year runs April 1 - March 31.
+function currentFinancialYearRange(): { dateFrom: string; dateTo: string } {
+  const now = new Date();
+  const startYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1; // Jan-Mar belongs to the FY that started the previous April
+  return { dateFrom: `${startYear}-04-01`, dateTo: `${startYear + 1}-03-31` };
+}
+
+function parseDateRange(reference: string): { dateFrom: string; dateTo: string } {
+  const match = reference.trim().match(/^(\d{4}-\d{2}-\d{2})\s*:\s*(\d{4}-\d{2}-\d{2})$/);
+  if (match) return { dateFrom: match[1], dateTo: match[2] };
+  return currentFinancialYearRange();
+}
+
+const AGING_BUCKETS = ["0-30 days", "31-60 days", "61-90 days", "90+ days"];
+
+function agingBucketFor(days: number): string {
+  if (days <= 30) return AGING_BUCKETS[0];
+  if (days <= 60) return AGING_BUCKETS[1];
+  if (days <= 90) return AGING_BUCKETS[2];
+  return AGING_BUCKETS[3];
+}
+
+function isSameMonth(dateStr: string, ref: Date): boolean {
+  const d = new Date(dateStr);
+  return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth();
+}
+
+function isSameQuarter(dateStr: string, ref: Date): boolean {
+  const d = new Date(dateStr);
+  return d.getFullYear() === ref.getFullYear() && Math.floor(d.getMonth() / 3) === Math.floor(ref.getMonth() / 3);
+}
+
+async function resolveAccountStatement(vendor: VendorIdentity, reference: string, started: number): Promise<ResolveResult> {
+  const sap = getSapConnector();
+  const { dateFrom, dateTo } = parseDateRange(reference);
+
+  const invoices = await sap.listInvoices(vendor.vendorCode, dateFrom, dateTo);
+  if (invoices.length === 0) {
+    return escalate(vendor, "account_statement", reference, `No invoices found between ${dateFrom} and ${dateTo}`, started);
+  }
+
+  // Payments are joined against this invoice set rather than re-fetched
+  // per-invoice — getPaymentStatus() with no reference already returns
+  // every payment for the vendor.
+  const invoiceNos = new Set(invoices.map((i) => i.invoiceNo));
+  const allPayments = await sap.getPaymentStatus(vendor.vendorCode);
+  const payments = allPayments.filter((p) => invoiceNos.has(p.invoiceNo));
+  const paymentByInvoice = new Map(payments.map((p) => [p.invoiceNo, p]));
+
+  const currency = invoices[0].currency;
+  const totalInvoiced = invoices.reduce((s, i) => s + i.amount, 0);
+  const totalCleared = payments.filter((p) => p.status === "Cleared").reduce((s, p) => s + p.amount, 0);
+
+  const outstandingInvoices = invoices.filter((inv) => paymentByInvoice.get(inv.invoiceNo)?.status !== "Cleared");
+  const totalOutstanding = outstandingInvoices.reduce((s, i) => s + i.amount, 0);
+
+  const now = new Date();
+  const agingTotals = new Map(AGING_BUCKETS.map((b) => [b, { count: 0, amount: 0 }]));
+  let totalPayableThisMonth = 0;
+  let totalPayableThisQuarter = 0;
+
+  for (const inv of outstandingInvoices) {
+    const daysOutstanding = Math.floor((now.getTime() - new Date(inv.postingDate).getTime()) / 86_400_000);
+    const bucket = agingTotals.get(agingBucketFor(Math.max(daysOutstanding, 0)))!;
+    bucket.count += 1;
+    bucket.amount += inv.amount;
+
+    // Best available proxy for "when this is due" — a scheduled payment
+    // date if SAP already has one, otherwise the invoice's own posting date.
+    const expectedDate = paymentByInvoice.get(inv.invoiceNo)?.scheduledDate ?? inv.postingDate;
+    if (isSameMonth(expectedDate, now)) totalPayableThisMonth += inv.amount;
+    if (isSameQuarter(expectedDate, now)) totalPayableThisQuarter += inv.amount;
+  }
+
+  const agingSummary: AgingBucket[] = AGING_BUCKETS.map((bucket) => ({ bucket, ...agingTotals.get(bucket)! }));
+
+  const paidInvoices = invoices
+    .filter((inv) => paymentByInvoice.get(inv.invoiceNo)?.status === "Cleared")
+    .map((inv) => ({ ...inv, paymentDate: paymentByInvoice.get(inv.invoiceNo)?.clearingDate ?? null }));
+
+  const pendingApprovalInvoices = invoices.filter((inv) => inv.approvalStatus === "Pending Approval");
+
+  const summary =
+    `Account statement for ${dateFrom} to ${dateTo}: ${invoices.length} invoice${invoices.length === 1 ? "" : "s"} ` +
+    `totaling ${currency} ${totalInvoiced.toLocaleString("en-IN")}. ${currency} ${totalCleared.toLocaleString("en-IN")} cleared, ` +
+    `${currency} ${totalOutstanding.toLocaleString("en-IN")} outstanding — ${currency} ${totalPayableThisMonth.toLocaleString("en-IN")} ` +
+    `payable this month, ${currency} ${totalPayableThisQuarter.toLocaleString("en-IN")} this quarter. ` +
+    `${pendingApprovalInvoices.length} invoice${pendingApprovalInvoices.length === 1 ? "" : "s"} pending approval.`;
+
+  addQueryLogEntry({
+    vendorCode: vendor.vendorCode,
+    vendorName: vendor.vendorName,
+    queryType: "account_statement",
+    reference: `${dateFrom}:${dateTo}`,
+    outcome: "auto_resolved",
+    responseSummary: summary,
+    resolutionSeconds: (Date.now() - started) / 1000,
+  });
+
+  return {
+    kind: "statement",
+    summary,
+    dateFrom,
+    dateTo,
+    currency,
+    invoices,
+    payments,
+    agingSummary,
+    totalOutstanding,
+    totalPayableThisMonth,
+    totalPayableThisQuarter,
+    paidInvoices,
+    pendingApprovalInvoices,
+  };
 }

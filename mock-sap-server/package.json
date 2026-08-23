@@ -1,0 +1,15 @@
+{
+  "name": "mock-sap-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone mock SAP-like REST API (Supplier, Invoice, Payment, Form 16 withholding) for testing against — not part of the vendor-query-assistant bot.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}

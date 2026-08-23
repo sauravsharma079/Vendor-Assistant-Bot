@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import type { QueryType } from "@/lib/sap/types";
+import * as XLSX from "xlsx";
+import type { QueryType, InvoiceStatusResult, PaymentStatusResult } from "@/lib/sap/types";
+import type { AgingBucket } from "@/lib/resolver";
 
 type Sender = "bot" | "vendor";
 
@@ -16,23 +18,225 @@ type Step = "identity" | "otp" | "menu" | "reference" | "done";
 const QUERY_LABELS: Record<QueryType, string> = {
   invoice_status: "Invoice status",
   payment_status: "Payment status",
-  form16: "Form 16 / TDS certificate",
+  form16: "Form 16A / Form 26AS / TDS",
+  account_statement: "Account statement",
 };
 
 const REFERENCE_PROMPTS: Record<QueryType, string> = {
   invoice_status: "What's the invoice number or PO number?",
   payment_status: "What's the invoice number? (Leave blank to see all recent payments.)",
   form16: "Which financial year? (e.g. 2025-26)",
+  account_statement: "Which date range? (e.g. 2025-04-01:2026-03-31, or leave blank for the current financial year)",
 };
 
 const REFERENCE_PLACEHOLDERS: Record<QueryType, string> = {
   invoice_status: "e.g. 5100012345 or PO 4500009876",
   payment_status: "Invoice number, or leave blank for all",
   form16: "e.g. 2025-26",
+  account_statement: "e.g. 2025-04-01:2026-03-31",
 };
 
 let msgId = 0;
 const nextId = () => `m${++msgId}`;
+
+// Shown under every resolved/statement answer so a vendor who isn't fully
+// satisfied can open a ticket (with their own description) instead of the
+// conversation just ending. Self-contained: manages its own asking ->
+// describing -> submitted states and reports the outcome back via
+// onSettled so it can be rendered as a normal chat bubble.
+function FollowUpPrompt({
+  queryType,
+  reference,
+  onSettled,
+}: {
+  queryType: QueryType;
+  reference: string;
+  onSettled: (content: React.ReactNode) => void;
+}) {
+  const [mode, setMode] = useState<"asking" | "describing" | "submitting">("asking");
+  const [description, setDescription] = useState("");
+
+  async function submitTicket(e: React.FormEvent) {
+    e.preventDefault();
+    if (!description.trim()) return;
+    setMode("submitting");
+    try {
+      const res = await fetch("/api/follow-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queryType, reference, description: description.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        onSettled(<span className="text-red-700">{data.error || "Couldn't open a ticket right now. Please try again."}</span>);
+      } else {
+        onSettled(
+          <div>
+            <p>{data.summary}</p>
+            <p className="mt-1 text-xs text-[#5b6b7c]">
+              Reference this ticket ID with business support if you follow up: <b>{data.ticketId}</b>
+            </p>
+          </div>
+        );
+      }
+    } catch {
+      onSettled(<span className="text-red-700">Something went wrong opening the ticket. Please try again.</span>);
+    }
+  }
+
+  if (mode === "asking") {
+    return (
+      <div className="mt-2">
+        <p className="text-xs text-[#5b6b7c]">Still need help with this?</p>
+        <div className="mt-1.5 flex gap-2">
+          <button
+            onClick={() => onSettled(<span className="text-xs text-[#5b6b7c]">Marked as resolved — glad we could help!</span>)}
+            className="rounded-full border border-[#0f1729]/15 px-3 py-1 text-xs font-medium text-[#0f1729] hover:bg-[#0f1729]/5"
+          >
+            Mark as resolved
+          </button>
+          <button
+            onClick={() => setMode("describing")}
+            className="rounded-full border border-[#0f1729]/15 px-3 py-1 text-xs font-medium text-[#0f1729] hover:bg-[#0f1729]/5"
+          >
+            I still need help
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submitTicket} className="mt-2">
+      <p className="text-xs text-[#5b6b7c]">Briefly describe what you still need help with:</p>
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        rows={2}
+        disabled={mode === "submitting"}
+        placeholder="e.g. This is marked Approved but I still haven't received payment"
+        className="mt-1 w-full rounded-lg border border-black/10 px-2.5 py-1.5 text-xs focus:border-[#C9A227] focus:outline-none disabled:opacity-60"
+      />
+      <button
+        type="submit"
+        disabled={mode === "submitting" || !description.trim()}
+        className="mt-1.5 rounded-full bg-[#C9A227] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#A9860E] disabled:opacity-50"
+      >
+        {mode === "submitting" ? "Opening ticket…" : "Open ticket"}
+      </button>
+    </form>
+  );
+}
+
+interface StatementData {
+  dateFrom: string;
+  dateTo: string;
+  currency: string;
+  invoices: InvoiceStatusResult[];
+  payments: PaymentStatusResult[];
+  agingSummary: AgingBucket[];
+  totalOutstanding: number;
+  totalPayableThisMonth: number;
+  totalPayableThisQuarter: number;
+  paidInvoices: (InvoiceStatusResult & { paymentDate: string | null })[];
+  pendingApprovalInvoices: InvoiceStatusResult[];
+}
+
+function sheet(rows: Record<string, unknown>[]) {
+  return XLSX.utils.json_to_sheet(rows);
+}
+
+function downloadStatementExcel(s: StatementData) {
+  const { dateFrom, dateTo, currency } = s;
+  const totalInvoiced = s.invoices.reduce((sum, i) => sum + i.amount, 0);
+  const totalCleared = s.paidInvoices.reduce((sum, i) => sum + i.amount, 0);
+  const wb = XLSX.utils.book_new();
+
+  // Summary — headline totals + aging buckets, the "at a glance" sheet.
+  XLSX.utils.book_append_sheet(
+    wb,
+    sheet([
+      { Metric: "Statement period", Value: `${dateFrom} to ${dateTo}` },
+      { Metric: "Total invoices", Value: s.invoices.length },
+      { Metric: "Total invoiced", Value: `${currency} ${totalInvoiced.toLocaleString("en-IN")}` },
+      { Metric: "Total cleared", Value: `${currency} ${totalCleared.toLocaleString("en-IN")}` },
+      { Metric: "Total outstanding", Value: `${currency} ${s.totalOutstanding.toLocaleString("en-IN")}` },
+      { Metric: "Payable this month", Value: `${currency} ${s.totalPayableThisMonth.toLocaleString("en-IN")}` },
+      { Metric: "Payable this quarter", Value: `${currency} ${s.totalPayableThisQuarter.toLocaleString("en-IN")}` },
+      { Metric: "Pending approval", Value: s.pendingApprovalInvoices.length },
+      {},
+      { Metric: "Aging bucket", Value: "Count / Amount" },
+      ...s.agingSummary.map((a) => ({ Metric: a.bucket, Value: `${a.count} / ${currency} ${a.amount.toLocaleString("en-IN")}` })),
+    ]),
+    "Summary"
+  );
+
+  XLSX.utils.book_append_sheet(
+    wb,
+    sheet(
+      s.invoices.map((inv) => ({
+        "Invoice No": inv.invoiceNo,
+        "PO Number": inv.poNumber,
+        "Posting Date": inv.postingDate,
+        Status: inv.approvalStatus,
+        "GRN Matched": inv.grnMatched ? "Yes" : "No",
+        Amount: inv.amount,
+        Currency: inv.currency,
+        "Block Reason": inv.blockReason ?? "",
+      }))
+    ),
+    "Invoices Submitted"
+  );
+
+  XLSX.utils.book_append_sheet(
+    wb,
+    sheet(
+      s.paidInvoices.map((inv) => ({
+        "Invoice No": inv.invoiceNo,
+        "PO Number": inv.poNumber,
+        "Posting Date": inv.postingDate,
+        "Payment Date": inv.paymentDate ?? "",
+        Amount: inv.amount,
+        Currency: inv.currency,
+      }))
+    ),
+    "Invoices Paid"
+  );
+
+  XLSX.utils.book_append_sheet(
+    wb,
+    sheet(
+      s.pendingApprovalInvoices.map((inv) => ({
+        "Invoice No": inv.invoiceNo,
+        "PO Number": inv.poNumber,
+        "Posting Date": inv.postingDate,
+        Amount: inv.amount,
+        Currency: inv.currency,
+      }))
+    ),
+    "Pending Approval"
+  );
+
+  XLSX.utils.book_append_sheet(
+    wb,
+    sheet(
+      s.payments.map((p) => ({
+        "Invoice No": p.invoiceNo,
+        "Payment Doc No": p.paymentDocNo ?? "",
+        Status: p.status,
+        "Clearing Date": p.clearingDate ?? "",
+        "Scheduled Date": p.scheduledDate ?? "",
+        Amount: p.amount,
+        Currency: p.currency,
+        "Bank Reference": p.bankReference ?? "",
+        "Hold Reason": p.holdReason ?? "",
+      }))
+    ),
+    "Payments"
+  );
+
+  XLSX.writeFile(wb, `account-statement-${dateFrom}-to-${dateTo}.xlsx`);
+}
 
 export function VendorChat() {
   const [messages, setMessages] = useState<Message[]>([
@@ -40,7 +244,7 @@ export function VendorChat() {
       id: nextId(),
       sender: "bot",
       content:
-        "Hi, I'm the Vendor Query Assistant. I can help with invoice status, payment status, and Form 16 requests \u2014 pulled live from SAP. First, let's verify who you are: enter your vendor code and PAN or GSTIN as registered in SAP.",
+        "Hi, I'm the Vendor Query Assistant. I can help with invoice status, payment status, and Form 16A / Form 26AS / TDS requests \u2014 pulled live from SAP. First, let's verify who you are: enter your vendor code and PAN or GSTIN as registered in SAP.",
     },
   ]);
   const [step, setStep] = useState<Step>("identity");
@@ -49,6 +253,7 @@ export function VendorChat() {
   const [otp, setOtp] = useState("");
   const [queryType, setQueryType] = useState<QueryType | null>(null);
   const [reference, setReference] = useState("");
+  const [aiQuestion, setAiQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [vendorName, setVendorName] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -148,6 +353,105 @@ export function VendorChat() {
     pushBot(REFERENCE_PROMPTS[type]);
   }
 
+  // Shared by the menu-driven flow and the AI free-text flow — both end up
+  // calling the same resolveQuery() on the server, so both render the same
+  // result the same way. queryType/reference (the ones actually resolved,
+  // which for the AI flow may differ from client-side state) are what the
+  // "still need help?" follow-up ticket is filed against.
+  function pushResolveResult(
+    data: { kind: string; summary?: string; ticketId?: string } & Partial<StatementData>,
+    resolvedQueryType: QueryType | null,
+    resolvedReference: string
+  ) {
+    function pushFollowUp() {
+      if (!resolvedQueryType) return;
+      const msgIdForFollowUp = nextId();
+      setMessages((m) => [
+        ...m,
+        {
+          id: msgIdForFollowUp,
+          sender: "bot",
+          content: (
+            <FollowUpPrompt
+              queryType={resolvedQueryType}
+              reference={resolvedReference}
+              onSettled={(content) =>
+                setMessages((m2) => m2.map((msg) => (msg.id === msgIdForFollowUp ? { ...msg, content } : msg)))
+              }
+            />
+          ),
+        },
+      ]);
+    }
+
+    if (data.kind === "statement") {
+      const statement: StatementData = {
+        dateFrom: data.dateFrom ?? "",
+        dateTo: data.dateTo ?? "",
+        currency: data.currency ?? "INR",
+        invoices: data.invoices ?? [],
+        payments: data.payments ?? [],
+        agingSummary: data.agingSummary ?? [],
+        totalOutstanding: data.totalOutstanding ?? 0,
+        totalPayableThisMonth: data.totalPayableThisMonth ?? 0,
+        totalPayableThisQuarter: data.totalPayableThisQuarter ?? 0,
+        paidInvoices: data.paidInvoices ?? [],
+        pendingApprovalInvoices: data.pendingApprovalInvoices ?? [],
+      };
+      pushBot(
+        <div>
+          <p>{data.summary}</p>
+          <button
+            onClick={() => downloadStatementExcel(statement)}
+            className="mt-2 rounded-full bg-[#C9A227] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#A9860E]"
+          >
+            Download statement (Excel)
+          </button>
+        </div>
+      );
+      pushFollowUp();
+      pushBot(
+        <button
+          onClick={resetToMenu}
+          className="mt-1 rounded-full border border-[#0f1729]/15 px-3 py-1 text-xs font-medium text-[#0f1729] hover:bg-[#0f1729]/5"
+        >
+          Ask another question
+        </button>
+      );
+      setStep("done");
+    } else if (data.kind === "resolved") {
+      pushBot(<div>{data.summary}</div>);
+      pushFollowUp();
+      pushBot(
+        <button
+          onClick={resetToMenu}
+          className="mt-1 rounded-full border border-[#0f1729]/15 px-3 py-1 text-xs font-medium text-[#0f1729] hover:bg-[#0f1729]/5"
+        >
+          Ask another question
+        </button>
+      );
+      setStep("done");
+    } else if (data.kind === "escalated") {
+      pushBot(
+        <div>
+          <p>{data.summary}</p>
+          <p className="mt-1 text-xs text-[#5b6b7c]">
+            Reference this ticket ID with business support if you follow up: <b>{data.ticketId}</b>
+          </p>
+        </div>
+      );
+      pushBot(
+        <button
+          onClick={resetToMenu}
+          className="mt-1 rounded-full border border-[#0f1729]/15 px-3 py-1 text-xs font-medium text-[#0f1729] hover:bg-[#0f1729]/5"
+        >
+          Ask another question
+        </button>
+      );
+      setStep("done");
+    }
+  }
+
   async function handleReferenceSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!queryType) return;
@@ -169,41 +473,57 @@ export function VendorChat() {
       } else if (data.kind === "system_error") {
         pushBot(<div className="text-red-700">{data.message}</div>);
         setStep("done");
-      } else if (data.kind === "resolved") {
-        pushBot(<div>{data.summary}</div>);
-        pushBot(
-          <button
-            onClick={resetToMenu}
-            className="mt-1 rounded-full border border-[#0b1f35]/15 px-3 py-1 text-xs font-medium text-[#0b1f35] hover:bg-[#0b1f35]/5"
-          >
-            Ask another question
-          </button>
-        );
-        setStep("done");
-      } else if (data.kind === "escalated") {
-        pushBot(
-          <div>
-            <p>{data.summary}</p>
-            <p className="mt-1 text-xs text-[#5b6b7c]">
-              Reference this ticket ID with business support if you follow up: <b>{data.ticketId}</b>
-            </p>
-          </div>
-        );
-        pushBot(
-          <button
-            onClick={resetToMenu}
-            className="mt-1 rounded-full border border-[#0b1f35]/15 px-3 py-1 text-xs font-medium text-[#0b1f35] hover:bg-[#0b1f35]/5"
-          >
-            Ask another question
-          </button>
-        );
-        setStep("done");
+      } else {
+        pushResolveResult(data, queryType, reference);
       }
     } catch {
       pushBot(<span className="text-red-700">Something went wrong reaching SAP. Please try again.</span>);
     } finally {
       setLoading(false);
       setReference("");
+    }
+  }
+
+  async function handleAiQuestionSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const question = aiQuestion.trim();
+    if (!question) return;
+    pushVendor(question);
+    setAiQuestion("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/ai-query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: question }),
+      });
+      const data = await res.json();
+
+      if (res.status === 401) {
+        pushBot(<span className="text-red-700">Your session has expired. Please verify again.</span>);
+        setStep("identity");
+        setVendorCode("");
+        setVendorName(null);
+      } else if (!res.ok) {
+        // Covers "not configured" (503), a Groq failure (502), or anything
+        // else — always show *something* rather than failing silently.
+        pushBot(
+          <span className="text-red-700">
+            {data?.error || "Something went wrong reaching the assistant. Please try again or use the buttons below."}
+          </span>
+        );
+      } else if (data.kind === "clarify") {
+        pushBot(<div>{data.message}</div>);
+      } else if (data.kind === "system_error") {
+        pushBot(<div className="text-red-700">{data.message}</div>);
+        setStep("done");
+      } else {
+        pushResolveResult(data, data.queryType ?? null, data.reference ?? "");
+      }
+    } catch {
+      pushBot(<span className="text-red-700">Something went wrong reaching the assistant. Please try again.</span>);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -218,14 +538,14 @@ export function VendorChat() {
       {vendorName && (
         <div className="flex items-center justify-between border-b border-black/5 bg-[#f6f7f9] px-4 py-2 text-xs text-[#5b6b7c]">
           <span>
-            Signed in as <b className="text-[#0b1f35]">{vendorName}</b>
+            Signed in as <b className="text-[#0f1729]">{vendorName}</b>
           </span>
           <button
             onClick={async () => {
               await fetch("/api/auth/logout", { method: "POST" });
               window.location.reload();
             }}
-            className="text-[#c9852a] hover:underline"
+            className="text-[#C9A227] hover:underline"
           >
             Sign out
           </button>
@@ -237,7 +557,7 @@ export function VendorChat() {
             <div
               className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-[14px] leading-relaxed ${
                 m.sender === "vendor"
-                  ? "bg-[#0b1f35] text-white"
+                  ? "bg-[#0f1729] text-white"
                   : "bg-[#f6f7f9] text-[#16212e] border border-black/5"
               }`}
             >
@@ -262,18 +582,18 @@ export function VendorChat() {
               value={vendorCode}
               onChange={(e) => setVendorCode(e.target.value)}
               placeholder="Vendor code (as in SAP)"
-              className="min-w-[160px] flex-1 rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-[#c9852a]"
+              className="min-w-[160px] flex-1 rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-[#C9A227]"
             />
             <input
               value={panOrGstin}
               onChange={(e) => setPanOrGstin(e.target.value)}
               placeholder="PAN or GSTIN"
-              className="min-w-[160px] flex-1 rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-[#c9852a]"
+              className="min-w-[160px] flex-1 rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-[#C9A227]"
             />
             <button
               type="submit"
               disabled={loading}
-              className="rounded-lg bg-[#c9852a] px-4 py-2 text-sm font-medium text-white hover:bg-[#b5741f] disabled:opacity-50"
+              className="rounded-lg bg-[#C9A227] px-4 py-2 text-sm font-medium text-white hover:bg-[#A9860E] disabled:opacity-50"
             >
               {loading ? "Checking\u2026" : "Verify"}
             </button>
@@ -287,13 +607,13 @@ export function VendorChat() {
               onChange={(e) => setOtp(e.target.value)}
               placeholder="6-digit code"
               inputMode="numeric"
-              className="min-w-[160px] flex-1 rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-[#c9852a]"
+              className="min-w-[160px] flex-1 rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-[#C9A227]"
               autoFocus
             />
             <button
               type="submit"
               disabled={loading}
-              className="rounded-lg bg-[#c9852a] px-4 py-2 text-sm font-medium text-white hover:bg-[#b5741f] disabled:opacity-50"
+              className="rounded-lg bg-[#C9A227] px-4 py-2 text-sm font-medium text-white hover:bg-[#A9860E] disabled:opacity-50"
             >
               {loading ? "Verifying\u2026" : "Confirm"}
             </button>
@@ -301,16 +621,38 @@ export function VendorChat() {
         )}
 
         {step === "menu" && (
-          <div className="flex flex-wrap gap-2">
-            {(Object.keys(QUERY_LABELS) as QueryType[]).map((t) => (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(QUERY_LABELS) as QueryType[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => handleMenuPick(t)}
+                  className="rounded-full border border-[#0f1729]/15 px-4 py-2 text-sm font-medium text-[#0f1729] hover:bg-[#0f1729]/5"
+                >
+                  {QUERY_LABELS[t]}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="h-px flex-1 bg-black/10" />
+              <span className="text-[11px] text-[#5b6b7c]">or just ask</span>
+              <div className="h-px flex-1 bg-black/10" />
+            </div>
+            <form onSubmit={handleAiQuestionSubmit} className="flex flex-wrap items-center gap-2">
+              <input
+                value={aiQuestion}
+                onChange={(e) => setAiQuestion(e.target.value)}
+                placeholder="e.g. Has invoice 5100012345 been paid yet?"
+                className="min-w-[220px] flex-1 rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-[#C9A227]"
+              />
               <button
-                key={t}
-                onClick={() => handleMenuPick(t)}
-                className="rounded-full border border-[#0b1f35]/15 px-4 py-2 text-sm font-medium text-[#0b1f35] hover:bg-[#0b1f35]/5"
+                type="submit"
+                disabled={loading || !aiQuestion.trim()}
+                className="rounded-lg bg-[#C9A227] px-4 py-2 text-sm font-medium text-white hover:bg-[#A9860E] disabled:opacity-50"
               >
-                {QUERY_LABELS[t]}
+                {loading ? "Asking…" : "Ask"}
               </button>
-            ))}
+            </form>
           </div>
         )}
 
@@ -320,13 +662,13 @@ export function VendorChat() {
               value={reference}
               onChange={(e) => setReference(e.target.value)}
               placeholder={REFERENCE_PLACEHOLDERS[queryType]}
-              className="min-w-[220px] flex-1 rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-[#c9852a]"
+              className="min-w-[220px] flex-1 rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-[#C9A227]"
               autoFocus
             />
             <button
               type="submit"
               disabled={loading}
-              className="rounded-lg bg-[#c9852a] px-4 py-2 text-sm font-medium text-white hover:bg-[#b5741f] disabled:opacity-50"
+              className="rounded-lg bg-[#C9A227] px-4 py-2 text-sm font-medium text-white hover:bg-[#A9860E] disabled:opacity-50"
             >
               {loading ? "Checking\u2026" : "Send"}
             </button>

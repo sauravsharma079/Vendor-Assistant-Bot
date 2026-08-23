@@ -3,7 +3,7 @@ import { resolveQuery } from "@/lib/resolver";
 import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import type { QueryType } from "@/lib/sap/types";
 
-const VALID_TYPES: QueryType[] = ["invoice_status", "payment_status", "form16"];
+const VALID_TYPES: QueryType[] = ["invoice_status", "payment_status", "form16", "account_statement"];
 
 export async function POST(req: NextRequest) {
   // The vendor a request is scoped to comes ONLY from the signed session

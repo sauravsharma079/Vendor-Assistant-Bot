@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 :root {
-  --color-navy: #0b1f35;
-  --color-navy-2: #12293f;
-  --color-gold: #c9852a;
-  --color-gold-light: #e0a750;
+  --color-navy: #0f1729;
+  --color-navy-2: #17263c;
+  --color-accent: #C9A227;
+  --color-accent-light: #e6c55a;
   --color-steel: #5b6b7c;
   --color-bg: #f6f7f9;
 }
@@ -13,6 +13,11 @@ html,
 body {
   background: var(--color-bg);
   color: #16212e;
+  /* Lining figures everywhere — Georgia (.font-display) defaults to
+     old-style numerals (1 sits at x-height, 6/8 extend full height),
+     which looks inconsistent mid-heading. Lining keeps every digit the
+     same height/size across the whole platform. */
+  font-variant-numeric: lining-nums;
 }
 
 * {
@@ -20,7 +25,7 @@ body {
 }
 
 ::selection {
-  background: var(--color-gold-light);
+  background: var(--color-accent-light);
   color: #16212e;
 }
 

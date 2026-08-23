@@ -4,7 +4,7 @@
 // connector for a live one should not require changing anything above
 // this layer.
 
-export type QueryType = "invoice_status" | "payment_status" | "form16";
+export type QueryType = "invoice_status" | "payment_status" | "form16" | "account_statement";
 
 export interface VendorIdentity {
   vendorCode: string; // SAP Vendor/Supplier (LIFNR)
@@ -62,4 +62,12 @@ export interface SapConnector {
 
   /** Look up Form 16 / withholding tax certificate (WITH_ITEM). */
   getForm16(vendorCode: string, financialYear: string): Promise<Form16Result | null>;
+
+  /**
+   * List every invoice for a vendor within an optional posting-date range
+   * (ISO "YYYY-MM-DD", inclusive both ends). Powers the account statement —
+   * lib/resolver.ts joins this against getPaymentStatus() rather than each
+   * connector re-fetching payments itself.
+   */
+  listInvoices(vendorCode: string, dateFrom?: string, dateTo?: string): Promise<InvoiceStatusResult[]>;
 }

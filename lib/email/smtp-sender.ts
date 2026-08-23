@@ -34,6 +34,28 @@ export class SmtpEmailSender implements EmailSender {
         `This code expires in 5 minutes. If you didn't request this, you can ignore this email.\n`,
     });
   }
+
+  async sendTicketResolved(toEmail: string, vendorName: string, ticketRef: string, note: string): Promise<void> {
+    const host = requireEnv("SMTP_HOST");
+    const port = Number(requireEnv("SMTP_PORT"));
+    const user = requireEnv("SMTP_USER");
+    const pass = requireEnv("SMTP_PASS");
+    const from = requireEnv("SMTP_FROM");
+
+    const transport = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+
+    await transport.sendMail({
+      from,
+      to: toEmail,
+      subject: `Update on your Vendor Query Assistant ticket ${ticketRef}`,
+      text: `Hi ${vendorName},\n\n` + `${note}\n\n` + `Ticket reference: ${ticketRef}\n`,
+    });
+  }
 }
 
 function requireEnv(name: string): string {

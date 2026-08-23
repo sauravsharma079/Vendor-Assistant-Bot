@@ -1,12 +1,13 @@
 import Link from "next/link";
+import { VeltrianceMark } from "./VeltrianceMark";
 
 export function Header({ active }: { active: "portal" | "admin" }) {
   return (
-    <header className="border-b border-black/10 bg-[#0b1f35]">
+    <header className="border-b border-black/10 bg-[#0f1729]">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded bg-[#c9852a] font-display text-sm font-bold text-white">
-            V
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-white p-1.5">
+            <VeltrianceMark className="h-full w-full" />
           </div>
           <div>
             <p className="font-display text-[15px] font-semibold leading-none text-white">
@@ -21,7 +22,7 @@ export function Header({ active }: { active: "portal" | "admin" }) {
           <Link
             href="/"
             className={`rounded-full px-4 py-1.5 transition ${
-              active === "portal" ? "bg-[#c9852a] text-white" : "text-white/60 hover:text-white"
+              active === "portal" ? "bg-[#C9A227] text-white" : "text-white/60 hover:text-white"
             }`}
           >
             Vendor Portal
@@ -29,7 +30,7 @@ export function Header({ active }: { active: "portal" | "admin" }) {
           <Link
             href="/admin"
             className={`rounded-full px-4 py-1.5 transition ${
-              active === "admin" ? "bg-[#c9852a] text-white" : "text-white/60 hover:text-white"
+              active === "admin" ? "bg-[#C9A227] text-white" : "text-white/60 hover:text-white"
             }`}
           >
             Business Support

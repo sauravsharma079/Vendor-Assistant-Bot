@@ -78,12 +78,27 @@ export function getAuditLog(): AuditLogEntry[] {
   return load().auditLog;
 }
 
-export function updateTicketStatus(id: string, status: Ticket["status"]): Ticket | null {
+export function updateTicketStatus(id: string, status: Ticket["status"], resolutionNote?: string): Ticket | null {
   const store = load();
   const ticket = store.tickets.find((t) => t.id === id);
   if (!ticket) return null;
   ticket.status = status;
+  if (resolutionNote !== undefined) ticket.resolutionNote = resolutionNote || null;
   save(store);
   addAuditEntry({ actor: "business_support", action: "ticket_status_change", details: `Ticket ${id} -> ${status}` });
+  return ticket;
+}
+
+export function updateTicketAssignee(id: string, assignee: string | null): Ticket | null {
+  const store = load();
+  const ticket = store.tickets.find((t) => t.id === id);
+  if (!ticket) return null;
+  ticket.assignee = assignee;
+  save(store);
+  addAuditEntry({
+    actor: "business_support",
+    action: "ticket_assigned",
+    details: `Ticket ${id} -> ${assignee ?? "Unassigned"}`,
+  });
   return ticket;
 }

@@ -21,4 +21,17 @@ export class ConsoleEmailSender implements EmailSender {
         `This only appears in the server console and is never sent to the browser.\n`
     );
   }
+
+  async sendTicketResolved(toEmail: string, vendorName: string, ticketRef: string, note: string): Promise<void> {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "ConsoleEmailSender cannot run in production. Set EMAIL_MODE=smtp and configure SMTP_* env vars."
+      );
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      `\n[DEV ONLY \u2014 not a real email] Ticket ${ticketRef} resolved for ${vendorName} (${toEmail}):\n${note}\n` +
+        `This only appears in the server console and is never sent to the browser.\n`
+    );
+  }
 }

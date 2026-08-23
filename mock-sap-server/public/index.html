@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VT SAP — Admin</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="shellbar">
+    <div class="shellbar-left">
+      <div class="shellbar-logo">S/4</div>
+      <div class="shellbar-title">VT SAP</div>
+    </div>
+    <div class="shellbar-right">
+      <div class="shellbar-avatar">VQ</div>
+    </div>
+  </header>
+
+  <div class="app-header">
+    <div class="app-title-row">
+      <div>
+        <div class="app-title">Vendor Master &amp; Financial Data</div>
+      </div>
+      <div class="filter-field">
+        <label for="vendorFilter">Vendor Code</label>
+        <input id="vendorFilter" type="text" placeholder="e.g. 100001" />
+      </div>
+    </div>
+    <nav class="tabs" id="tabs"></nav>
+  </div>
+
+  <main id="content">
+    <div class="empty">Loading…</div>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

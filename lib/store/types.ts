@@ -17,12 +17,15 @@ export interface Ticket {
   createdAt: string; // ISO
   vendorCode: string;
   vendorName: string;
+  vendorEmail: string;
   queryType: QueryType;
   reference: string | null;
   reason: string;
   status: "open" | "in_progress" | "resolved";
   slaDueAt: string; // ISO
   queryLogId: string;
+  resolutionNote: string | null; // business support's reply, shown to the vendor via email on resolve
+  assignee: string | null; // business support agent this ticket is assigned to
 }
 
 export interface AuditLogEntry {
