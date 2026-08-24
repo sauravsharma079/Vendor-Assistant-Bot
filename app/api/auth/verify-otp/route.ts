@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "vendorCode and otp are required" }, { status: 400 });
   }
 
-  const result = verifyOtp(vendorCode, otp);
+  const result = await verifyOtp(vendorCode, otp);
 
   if (result.status !== "ok") {
     const messages: Record<string, string> = {
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       incorrect: "Incorrect code. Please try again.",
       locked_out: "Too many incorrect attempts. Please request a new code.",
     };
-    addAuditEntry({
+    await addAuditEntry({
       actor: `vendor:${vendorCode}`,
       action: "otp_verification_failed",
       details: `OTP check for ${vendorCode}: ${result.status}`,
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   const token = createSessionToken({ vendorCode, vendorName: result.vendorName, email: result.email });
 
-  addAuditEntry({
+  await addAuditEntry({
     actor: `vendor:${vendorCode}`,
     action: "session_created",
     details: `${result.vendorName} (${vendorCode}) completed onboarding and started a session`,

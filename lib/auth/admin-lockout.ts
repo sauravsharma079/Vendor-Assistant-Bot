@@ -1,13 +1,13 @@
-import fs from "fs";
-import path from "path";
+import { kvLoad, kvSave } from "@/lib/kv-store";
 
 // Brute-force protection for the shared admin/business-support password,
-// keyed by source IP. Mirrors the PAN/GSTIN lockout in otp-store.ts. File-
-// backed for the same reason as the rest of lib/auth — fine for a
-// single-instance demo, move to Redis/a database before multi-instance use.
+// keyed by source IP. Mirrors the PAN/GSTIN lockout in otp-store.ts.
+// Persists through lib/kv-store — Redis when configured (required once
+// hosted on a serverless platform), a local .data/admin-auth.json file
+// otherwise.
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-const FILE = path.join(DATA_DIR, "admin-auth.json");
+const KEY = "vqa:admin-auth";
+const FILE = "admin-auth.json";
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
@@ -19,34 +19,24 @@ interface AttemptRecord {
 
 type StoreShape = Record<string, AttemptRecord>;
 
-function load(): StoreShape {
-  try {
-    if (!fs.existsSync(FILE)) return {};
-    return JSON.parse(fs.readFileSync(FILE, "utf-8")) as StoreShape;
-  } catch {
-    return {};
-  }
+function load(): Promise<StoreShape> {
+  return kvLoad(KEY, FILE, {} as StoreShape);
 }
 
-function save(store: StoreShape) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(FILE, JSON.stringify(store, null, 2), "utf-8");
-  } catch {
-    // best-effort
-  }
+function save(store: StoreShape): Promise<void> {
+  return kvSave(KEY, FILE, store);
 }
 
-export function checkAdminLockout(key: string): { locked: boolean; retryAfterMs?: number } {
-  const store = load();
+export async function checkAdminLockout(key: string): Promise<{ locked: boolean; retryAfterMs?: number }> {
+  const store = await load();
   const record = store[key];
   if (!record || !record.lockedUntil) return { locked: false };
   if (Date.now() > record.lockedUntil) return { locked: false };
   return { locked: true, retryAfterMs: record.lockedUntil - Date.now() };
 }
 
-export function recordAdminFailure(key: string): void {
-  const store = load();
+export async function recordAdminFailure(key: string): Promise<void> {
+  const store = await load();
   const record = store[key] ?? { failedAttempts: 0, lockedUntil: null };
   record.failedAttempts += 1;
   if (record.failedAttempts >= MAX_ATTEMPTS) {
@@ -54,11 +44,11 @@ export function recordAdminFailure(key: string): void {
     record.failedAttempts = 0;
   }
   store[key] = record;
-  save(store);
+  await save(store);
 }
 
-export function clearAdminFailures(key: string): void {
-  const store = load();
+export async function clearAdminFailures(key: string): Promise<void> {
+  const store = await load();
   delete store[key];
-  save(store);
+  await save(store);
 }

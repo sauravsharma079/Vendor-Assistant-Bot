@@ -206,9 +206,13 @@ lib/
                                     type + reference) and phraseResponse()
                                     (rewords an already-fetched, already-
                                     correct summary — never generates facts)
-  store/                          File-backed store for tickets, query
-                                  log, audit log (swap for a real
-                                  database before production use)
+  store/                          Ticket, query log, and audit log store —
+                                  Redis-backed when KV_REST_API_URL/TOKEN
+                                  (or UPSTASH_REDIS_REST_URL/TOKEN) is set,
+                                  a local .data/*.json file otherwise
+  kv-store.ts                     Shared Redis-or-file persistence used by
+                                  lib/store and lib/auth (otp-store.ts,
+                                  admin-lockout.ts) — see "Hosting" below
 
 components/
   VendorChat.tsx                  Vendor onboarding + query chat widget
@@ -232,10 +236,16 @@ docs/
   (see "SAP service paths" above) and `npm run verify:sap` checks them
   automatically, but someone still needs to run that check against the
   real tenant and fix any mismatch before the client sees it.
-- The file-backed stores (`lib/store`, `lib/auth/otp-store.ts`,
-  `lib/auth/admin-lockout.ts`) are fine for a single-instance demo but
-  should move to a real database + cache/rate-limit store (e.g. Postgres
-  + Redis) before production or multi-instance hosting.
+- `lib/store`, `lib/auth/otp-store.ts`, and `lib/auth/admin-lockout.ts` are
+  Redis-backed (via `lib/kv-store.ts`) whenever `KV_REST_API_URL`/
+  `KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`)
+  are set — **required on any serverless host** (Vercel included), since a
+  file one request writes to local disk isn't visible to the next request,
+  which lands on a different instance. Without either pair set, they fall
+  back to a local `.data/*.json` file — fine for `npm run dev`, but a
+  single-instance-only choice; move to a real Postgres/etc. store before
+  ticket/query-log data needs to outlive a Redis eviction or a fresh
+  deploy wiping the store.
 - No CSRF token beyond `sameSite=strict` cookies — adequate for same-site
   usage, worth hardening further before wider rollout.
 - Query classification is menu-driven (not free-text NLP) by design —

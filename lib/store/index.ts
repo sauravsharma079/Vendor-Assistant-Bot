@@ -1,15 +1,14 @@
-import fs from "fs";
-import path from "path";
 import { randomUUID } from "crypto";
 import type { QueryLogEntry, Ticket, AuditLogEntry } from "./types";
+import { kvLoad, kvSave } from "@/lib/kv-store";
 
-// A tiny file-backed store, good enough for a standalone demo/prototype.
-// Swap for a real database (Postgres, etc.) once this graduates beyond
-// the demo stage \u2014 the shape of get/add functions below is the only
-// surface API routes depend on.
+// Persists through lib/kv-store — Redis when configured (required once
+// hosted on a serverless platform), a local .data/store.json file
+// otherwise. The shape of get/add functions below is the only surface
+// API routes depend on.
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-const FILE = path.join(DATA_DIR, "store.json");
+const KEY = "vqa:store";
+const FILE = "store.json";
 
 interface StoreShape {
   queryLog: QueryLogEntry[];
@@ -21,81 +20,68 @@ function emptyStore(): StoreShape {
   return { queryLog: [], tickets: [], auditLog: [] };
 }
 
-function load(): StoreShape {
-  try {
-    if (!fs.existsSync(FILE)) return emptyStore();
-    const raw = fs.readFileSync(FILE, "utf-8");
-    return JSON.parse(raw) as StoreShape;
-  } catch {
-    return emptyStore();
-  }
+function load(): Promise<StoreShape> {
+  return kvLoad(KEY, FILE, emptyStore());
 }
 
-function save(store: StoreShape) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(FILE, JSON.stringify(store, null, 2), "utf-8");
-  } catch {
-    // Best-effort persistence; fall through silently if the filesystem
-    // is read-only (e.g. some serverless hosts) \u2014 data still works
-    // in-memory for the life of the process.
-  }
+function save(store: StoreShape): Promise<void> {
+  return kvSave(KEY, FILE, store);
 }
 
-export function addQueryLogEntry(entry: Omit<QueryLogEntry, "id" | "timestamp">): QueryLogEntry {
-  const store = load();
+export async function addQueryLogEntry(entry: Omit<QueryLogEntry, "id" | "timestamp">): Promise<QueryLogEntry> {
+  const store = await load();
   const full: QueryLogEntry = { ...entry, id: randomUUID(), timestamp: new Date().toISOString() };
   store.queryLog.unshift(full);
-  save(store);
+  await save(store);
   return full;
 }
 
-export function addTicket(ticket: Omit<Ticket, "id" | "createdAt">): Ticket {
-  const store = load();
+export async function addTicket(ticket: Omit<Ticket, "id" | "createdAt">): Promise<Ticket> {
+  const store = await load();
   const full: Ticket = { ...ticket, id: randomUUID(), createdAt: new Date().toISOString() };
   store.tickets.unshift(full);
-  save(store);
+  await save(store);
   return full;
 }
 
-export function addAuditEntry(entry: Omit<AuditLogEntry, "id" | "timestamp">): AuditLogEntry {
-  const store = load();
+export async function addAuditEntry(entry: Omit<AuditLogEntry, "id" | "timestamp">): Promise<AuditLogEntry> {
+  const store = await load();
   const full: AuditLogEntry = { ...entry, id: randomUUID(), timestamp: new Date().toISOString() };
   store.auditLog.unshift(full);
-  save(store);
+  await save(store);
   return full;
 }
 
-export function getQueryLog(): QueryLogEntry[] {
-  return load().queryLog;
+export async function getQueryLog(): Promise<QueryLogEntry[]> {
+  return (await load()).queryLog;
 }
 
-export function getTickets(): Ticket[] {
-  return load().tickets;
+export async function getTickets(): Promise<Ticket[]> {
+  return (await load()).tickets;
 }
 
-export function getAuditLog(): AuditLogEntry[] {
-  return load().auditLog;
+export async function getAuditLog(): Promise<AuditLogEntry[]> {
+  return (await load()).auditLog;
 }
 
-export function updateTicketStatus(id: string, status: Ticket["status"], resolutionNote?: string): Ticket | null {
-  const store = load();
+export async function updateTicketStatus(id: string, status: Ticket["status"], resolutionNote?: string): Promise<Ticket | null> {
+  const store = await load();
   const ticket = store.tickets.find((t) => t.id === id);
   if (!ticket) return null;
   ticket.status = status;
   if (resolutionNote !== undefined) ticket.resolutionNote = resolutionNote || null;
-  save(store);
-  addAuditEntry({ actor: "business_support", action: "ticket_status_change", details: `Ticket ${id} -> ${status}` });
+  await save(store);
+  await addAuditEntry({ actor: "business_support", action: "ticket_status_change", details: `Ticket ${id} -> ${status}` });
   return ticket;
 }
 
-export function updateTicketAssignee(id: string, assignee: string | null): Ticket | null {
-  const store = load();
+export async function updateTicketAssignee(id: string, assignee: string | null): Promise<Ticket | null> {
+  const store = await load();
   const ticket = store.tickets.find((t) => t.id === id);
   if (!ticket) return null;
   ticket.assignee = assignee;
-  save(store);
-  addAuditEntry({
+  await save(store);
+  await addAuditEntry({
     actor: "business_support",
     action: "ticket_assigned",
     details: `Ticket ${id} -> ${assignee ?? "Unassigned"}`,

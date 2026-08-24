@@ -98,7 +98,7 @@ async function escalate(
   reason: string,
   started: number
 ): Promise<ResolveResult> {
-  const queryLogEntry = addQueryLogEntry({
+  const queryLogEntry = await addQueryLogEntry({
     vendorCode: vendor.vendorCode,
     vendorName: vendor.vendorName,
     queryType,
@@ -111,7 +111,7 @@ async function escalate(
   const slaHours = SLA_HOURS_BY_TYPE[queryType];
   const slaDueAt = new Date(Date.now() + slaHours * 3600 * 1000).toISOString();
 
-  const ticket = addTicket({
+  const ticket = await addTicket({
     vendorCode: vendor.vendorCode,
     vendorName: vendor.vendorName,
     vendorEmail: vendor.email,
@@ -125,7 +125,7 @@ async function escalate(
     assignee: null,
   });
 
-  addAuditEntry({
+  await addAuditEntry({
     actor: "system",
     action: "ticket_created",
     details: `Ticket ${ticket.id} created for ${vendor.vendorName} (${queryType}): ${reason}`,
@@ -187,7 +187,7 @@ async function resolveInvoice(vendor: VendorIdentity, reference: string, started
 
   const summary = detail;
 
-  addQueryLogEntry({
+  await addQueryLogEntry({
     vendorCode: vendor.vendorCode,
     vendorName: vendor.vendorName,
     queryType: "invoice_status",
@@ -240,7 +240,7 @@ async function resolvePayment(vendor: VendorIdentity, reference: string, started
     })
     .join(" ");
 
-  addQueryLogEntry({
+  await addQueryLogEntry({
     vendorCode: vendor.vendorCode,
     vendorName: vendor.vendorName,
     queryType: "payment_status",
@@ -269,7 +269,7 @@ async function resolveForm16(vendor: VendorIdentity, reference: string, started:
     `Form 16A / Form 26AS / TDS (${cert.certificateNo}) for FY ${cert.financialYear} ${cert.quarter} is available. ` +
     `TDS amount: ${cert.currency} ${cert.tdsAmount.toLocaleString("en-IN")}. Download: ${cert.downloadUrl}`;
 
-  addQueryLogEntry({
+  await addQueryLogEntry({
     vendorCode: vendor.vendorCode,
     vendorName: vendor.vendorName,
     queryType: "form16",
@@ -371,7 +371,7 @@ async function resolveAccountStatement(vendor: VendorIdentity, reference: string
     `payable this month, ${currency} ${totalPayableThisQuarter.toLocaleString("en-IN")} this quarter. ` +
     `${pendingApprovalInvoices.length} invoice${pendingApprovalInvoices.length === 1 ? "" : "s"} pending approval.`;
 
-  addQueryLogEntry({
+  await addQueryLogEntry({
     vendorCode: vendor.vendorCode,
     vendorName: vendor.vendorName,
     queryType: "account_statement",

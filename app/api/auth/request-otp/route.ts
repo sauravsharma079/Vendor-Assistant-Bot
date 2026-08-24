@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "vendorCode and panOrGstin are required" }, { status: 400 });
   }
 
-  const lockout = checkPanLockout(vendorCode);
+  const lockout = await checkPanLockout(vendorCode);
   if (lockout.locked) {
     return NextResponse.json(
       { error: "Too many failed attempts. Please try again later or contact business support." },
@@ -28,8 +28,8 @@ export async function POST(req: NextRequest) {
     const vendor = await sap.verifyVendor(vendorCode, panOrGstin);
 
     if (!vendor) {
-      recordPanFailure(vendorCode);
-      addAuditEntry({
+      await recordPanFailure(vendorCode);
+      await addAuditEntry({
         actor: `vendor:${vendorCode}`,
         action: "onboarding_verification_failed",
         details: `Vendor code ${vendorCode} with PAN/GSTIN ${maskTaxId(panOrGstin)} did not match SAP vendor master`,
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!vendor.email) {
-      addAuditEntry({
+      await addAuditEntry({
         actor: `vendor:${vendorCode}`,
         action: "onboarding_no_email_on_file",
         details: `Vendor ${vendor.vendorName} (${vendorCode}) has no email on file in SAP \u2014 cannot send OTP`,
@@ -52,11 +52,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    clearPanFailures(vendorCode);
-    const otp = createOtpChallenge(vendor);
+    await clearPanFailures(vendorCode);
+    const otp = await createOtpChallenge(vendor);
     await getEmailSender().sendOtp(vendor.email, otp, vendor.vendorName);
 
-    addAuditEntry({
+    await addAuditEntry({
       actor: `vendor:${vendorCode}`,
       action: "otp_sent",
       details: `OTP sent to ${maskEmail(vendor.email)} for ${vendor.vendorName} (${vendorCode})`,

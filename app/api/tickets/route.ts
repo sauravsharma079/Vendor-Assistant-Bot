@@ -4,7 +4,7 @@ import { getEmailSender } from "@/lib/email";
 import { formatTicketReference } from "@/lib/ticket-ref";
 
 export async function GET() {
-  return NextResponse.json({ tickets: getTickets() });
+  return NextResponse.json({ tickets: await getTickets() });
 }
 
 export async function PATCH(req: NextRequest) {
@@ -15,7 +15,7 @@ export async function PATCH(req: NextRequest) {
 
   if (body.status === undefined && "assignee" in body) {
     const assignee = typeof body.assignee === "string" && body.assignee.trim() ? body.assignee.trim() : null;
-    const updated = updateTicketAssignee(body.id, assignee);
+    const updated = await updateTicketAssignee(body.id, assignee);
     if (!updated) {
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
     }
@@ -27,7 +27,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const note = typeof body.note === "string" ? body.note.trim() : undefined;
-  const updated = updateTicketStatus(body.id, body.status, note);
+  const updated = await updateTicketStatus(body.id, body.status, note);
   if (!updated) {
     return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
   }
@@ -36,7 +36,7 @@ export async function PATCH(req: NextRequest) {
     const ticketRef = formatTicketReference(updated.id);
     const message = updated.resolutionNote || "Your ticket has been resolved. Please reach out if you have further questions.";
     if (!updated.vendorEmail) {
-      addAuditEntry({
+      await addAuditEntry({
         actor: "business_support",
         action: "ticket_resolution_email_skipped",
         details: `No email on file for ${updated.vendorName} (${updated.vendorCode}) — resolution email not sent for ticket ${ticketRef}`,
@@ -44,13 +44,13 @@ export async function PATCH(req: NextRequest) {
     } else {
       try {
         await getEmailSender().sendTicketResolved(updated.vendorEmail, updated.vendorName, ticketRef, message);
-        addAuditEntry({
+        await addAuditEntry({
           actor: "business_support",
           action: "ticket_resolution_emailed",
           details: `Resolution email sent to ${updated.vendorEmail} for ticket ${ticketRef}`,
         });
       } catch (err) {
-        addAuditEntry({
+        await addAuditEntry({
           actor: "business_support",
           action: "ticket_resolution_email_failed",
           details: `Could not email ${updated.vendorEmail} for ticket ${ticketRef}: ${err instanceof Error ? err.message : String(err)}`,

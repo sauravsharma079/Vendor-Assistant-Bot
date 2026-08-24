@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   }
 
   const key = clientKey(req);
-  const lockout = checkAdminLockout(key);
+  const lockout = await checkAdminLockout(key);
   if (lockout.locked) {
     return NextResponse.json(
       { error: "Too many failed attempts. Please try again later." },
@@ -37,8 +37,8 @@ export async function POST(req: NextRequest) {
   const password = typeof body?.password === "string" ? body.password : "";
 
   if (!password || !timingSafeStringEqual(password, configured)) {
-    recordAdminFailure(key);
-    addAuditEntry({
+    await recordAdminFailure(key);
+    await addAuditEntry({
       actor: `admin_ip:${key}`,
       action: "admin_login_failed",
       details: "Incorrect business support password",
@@ -46,8 +46,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Incorrect password." }, { status: 401 });
   }
 
-  clearAdminFailures(key);
-  addAuditEntry({ actor: `admin_ip:${key}`, action: "admin_login_succeeded", details: "Business support signed in" });
+  await clearAdminFailures(key);
+  await addAuditEntry({ actor: `admin_ip:${key}`, action: "admin_login_succeeded", details: "Business support signed in" });
 
   const token = createAdminSessionToken();
   const response = NextResponse.json({ ok: true });
