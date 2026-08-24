@@ -29,10 +29,14 @@ export async function POST(req: NextRequest) {
     const intent = await parseVendorIntent(message);
 
     if (!intent.queryType) {
+      // parseVendorIntent() always fills in a clarification whenever
+      // queryType is null — this text is an unreachable-in-practice
+      // safety net for that contract, kept only in case it's ever violated.
       return NextResponse.json({
         kind: "clarify",
         message:
-          intent.clarification ?? "Could you tell me if this is about an invoice, a payment, or your Form 16A / Form 26AS / TDS certificate?",
+          intent.clarification ||
+          "Could you tell me a bit more about what you need — an invoice, a payment, your Form 16A / Form 26AS / TDS certificate, an account statement, or something else our Business Support team can help with?",
       });
     }
 

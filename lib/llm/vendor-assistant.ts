@@ -48,17 +48,22 @@ export async function parseVendorIntent(message: string): Promise<ParsedIntent> 
   try {
     const parsed = JSON.parse(raw) as { queryType?: string; reference?: string; clarification?: string };
     const queryType = VALID_TYPES.includes(parsed.queryType as QueryType) ? (parsed.queryType as QueryType) : null;
+    const clarification = typeof parsed.clarification === "string" ? parsed.clarification.trim() : "";
     return {
       queryType,
       reference: typeof parsed.reference === "string" ? parsed.reference.trim() : "",
-      clarification: typeof parsed.clarification === "string" ? parsed.clarification : null,
+      // An empty/whitespace clarification is treated the same as none, so
+      // the caller's fallback text is what a vendor sees rather than a
+      // blank reply — this only ever happens if the model returns
+      // queryType: null with clarification omitted or empty.
+      clarification: clarification || null,
     };
   } catch {
     return {
       queryType: null,
       reference: "",
       clarification:
-        "I couldn't quite tell what you need — could you let me know if this is about an invoice, a payment, your Form 16A / Form 26AS / TDS certificate, a full account statement, or something else you'd like our team to look into?",
+        "I couldn't quite tell what you need — could you let me know if this is about an invoice, a payment, your Form 16A / Form 26AS / TDS certificate, a full account statement, or something else you'd like our Business Support team to look into?",
     };
   }
 }
