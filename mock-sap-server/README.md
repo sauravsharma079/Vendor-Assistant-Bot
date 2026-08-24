@@ -3,8 +3,10 @@
 A standalone REST API + browser admin UI that fakes a slice of SAP:
 **Supplier** master, **Contracts**, **Purchase Requisitions**, **Purchase
 Orders**, **Goods Receipts**, **Invoices**, **Payments**, **GL Postings**,
-and **Form 16** withholding tax certificates — chained together the way
-they'd relate in real SAP (Requisition → PO → GRN → Invoice → Payment → GL).
+and **Form 16** withholding tax certificates (with real mock Form 16A /
+Form 26AS PDFs, generated on demand — see `/certs/:certificateNo` below)
+— chained together the way they'd relate in real SAP (Requisition → PO →
+GRN → Invoice → Payment → GL).
 
 This is intentionally **not** wired into the bot's codebase. The bot's
 `lib/sap/` layer only ever calls a real SAP S/4HANA tenant by design (see
@@ -68,6 +70,9 @@ GET /api/gl-postings?vendorCode=&reference=
 
 GET /api/form16?vendorCode=100001                          # list all
 GET /api/form16?vendorCode=100001&financialYear=2025-26    # single record
+
+GET /certs/:certificateNo                                  # mock Form 16A PDF
+GET /certs/:certificateNo?type=26as                        # mock Form 26AS PDF
 ```
 
 ### Examples
@@ -86,6 +91,9 @@ curl "http://localhost:4001/api/payments?vendorCode=100001"
 curl "http://localhost:4001/api/gl-postings?vendorCode=100001"
 
 curl "http://localhost:4001/api/form16?vendorCode=100003&financialYear=2025-26"
+
+curl "http://localhost:4001/certs/FORM16A-2025-Q1-100001" -o form16a.pdf
+curl "http://localhost:4001/certs/FORM16A-2025-Q1-100001?type=26as" -o form26as.pdf
 ```
 
 ## Field shapes

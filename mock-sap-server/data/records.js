@@ -85,16 +85,16 @@ const payments = [
 ];
 
 const form16 = [
-  { vendorCode: "100001", certificateNo: "FORM16A-2025-Q1-100001", financialYear: "2025-26", quarter: "Q1", tdsAmount: 8425, currency: "INR", status: "Available", downloadUrl: "https://mock-sap.example.com/certs/FORM16A-2025-Q1-100001.pdf" },
-  { vendorCode: "100001", certificateNo: "FORM16A-2025-Q2-100001", financialYear: "2025-26", quarter: "Q2", tdsAmount: 3162, currency: "INR", status: "Under Processing", downloadUrl: null },
+  { vendorCode: "100001", certificateNo: "FORM16A-2025-Q1-100001", financialYear: "2025-26", quarter: "Q1", paidAmount: 842500, tdsAmount: 8425, currency: "INR", status: "Available", downloadUrl: "/certs/FORM16A-2025-Q1-100001" },
+  { vendorCode: "100001", certificateNo: "FORM16A-2025-Q2-100001", financialYear: "2025-26", quarter: "Q2", paidAmount: 316200, tdsAmount: 3162, currency: "INR", status: "Under Processing", downloadUrl: null },
 
-  { vendorCode: "100002", certificateNo: "FORM16A-2025-Q1-100002", financialYear: "2025-26", quarter: "Q1", tdsAmount: 1289, currency: "INR", status: "Available", downloadUrl: "https://mock-sap.example.com/certs/FORM16A-2025-Q1-100002.pdf" },
+  { vendorCode: "100002", certificateNo: "FORM16A-2025-Q1-100002", financialYear: "2025-26", quarter: "Q1", paidAmount: 128900, tdsAmount: 1289, currency: "INR", status: "Available", downloadUrl: "/certs/FORM16A-2025-Q1-100002" },
 
-  { vendorCode: "100003", certificateNo: "FORM16A-2025-Q1-100003", financialYear: "2025-26", quarter: "Q1", tdsAmount: 523, currency: "INR", status: "Available", downloadUrl: "https://mock-sap.example.com/certs/FORM16A-2025-Q1-100003.pdf" },
+  { vendorCode: "100003", certificateNo: "FORM16A-2025-Q1-100003", financialYear: "2025-26", quarter: "Q1", paidAmount: 52300, tdsAmount: 523, currency: "INR", status: "Available", downloadUrl: "/certs/FORM16A-2025-Q1-100003" },
 
-  { vendorCode: "100004", certificateNo: "FORM16A-2025-Q2-100004", financialYear: "2025-26", quarter: "Q2", tdsAmount: 6750, currency: "INR", status: "Not Yet Generated", downloadUrl: null },
+  { vendorCode: "100004", certificateNo: "FORM16A-2025-Q2-100004", financialYear: "2025-26", quarter: "Q2", paidAmount: 675000, tdsAmount: 6750, currency: "INR", status: "Not Yet Generated", downloadUrl: null },
 
-  { vendorCode: "100005", certificateNo: "FORM16A-2025-Q2-100005", financialYear: "2025-26", quarter: "Q2", tdsAmount: 389, currency: "INR", status: "Available", downloadUrl: "https://mock-sap.example.com/certs/FORM16A-2025-Q2-100005.pdf" },
+  { vendorCode: "100005", certificateNo: "FORM16A-2025-Q2-100005", financialYear: "2025-26", quarter: "Q2", paidAmount: 38900, tdsAmount: 389, currency: "INR", status: "Available", downloadUrl: "/certs/FORM16A-2025-Q2-100005" },
 ];
 
 module.exports = { suppliers, invoices, payments, form16 };

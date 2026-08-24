@@ -608,11 +608,38 @@ export function VendorChat() {
       );
       setStep("done");
     } else if (data.kind === "resolved") {
-      const purchaseOrder = (data.data as { purchaseOrder?: PurchaseOrderResult | null } | undefined)?.purchaseOrder;
+      const resultData = data.data as
+        | { purchaseOrder?: PurchaseOrderResult | null; downloadUrlForm16A?: string | null; downloadUrlForm26AS?: string | null }
+        | undefined;
+      const purchaseOrder = resultData?.purchaseOrder;
       pushBot(
         <div>
           <p>{data.summary}</p>
           {purchaseOrder && <PurchaseOrderCard po={purchaseOrder} />}
+          {(resultData?.downloadUrlForm16A || resultData?.downloadUrlForm26AS) && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {resultData.downloadUrlForm16A && (
+                <a
+                  href={resultData.downloadUrlForm16A}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full bg-[#C9A227] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#A9860E]"
+                >
+                  Download Form 16A (PDF)
+                </a>
+              )}
+              {resultData.downloadUrlForm26AS && (
+                <a
+                  href={resultData.downloadUrlForm26AS}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-[#0f1729]/15 px-3 py-1.5 text-xs font-medium text-[#0f1729] hover:bg-[#0f1729]/5"
+                >
+                  Download Form 26AS (PDF)
+                </a>
+              )}
+            </div>
+          )}
         </div>
       );
       pushFollowUp();

@@ -295,7 +295,7 @@ async function resolveForm16(vendor: VendorIdentity, reference: string, started:
 
   const summary =
     `Form 16A / Form 26AS / TDS (${cert.certificateNo}) for FY ${cert.financialYear} ${cert.quarter} is available. ` +
-    `TDS amount: ${cert.currency} ${cert.tdsAmount.toLocaleString("en-IN")}. Download: ${cert.downloadUrl}`;
+    `TDS amount: ${cert.currency} ${cert.tdsAmount.toLocaleString("en-IN")}.`;
 
   await addQueryLogEntry({
     vendorCode: vendor.vendorCode,

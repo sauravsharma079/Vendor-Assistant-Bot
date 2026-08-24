@@ -12,7 +12,9 @@
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
+const PDFDocument = require("pdfkit");
 const data = require("./data");
+const { renderForm16A, renderForm26AS } = require("./certs");
 
 const app = express();
 app.use(cors());
@@ -49,6 +51,7 @@ app.get("/api", (req, res) => {
       "GET /api/payments?vendorCode=&ref=(invoiceNo, optional)",
       "GET /api/gl-postings?vendorCode=&reference=",
       "GET /api/form16?vendorCode=&financialYear=(optional, single record if both given)",
+      "GET /certs/:certificateNo?type=16a|26as — mock PDF (defaults to 16a)",
     ],
   });
 });
@@ -142,6 +145,36 @@ app.get("/api/form16", (req, res) => {
   }
 
   res.json(listOrFilter(data.form16, { vendorCode }));
+});
+
+// ---- Form 16A / Form 26AS mock PDF certificates ----
+// Rendered on demand (see certs.js) rather than pre-generated — the full
+// mock dataset has ~2,000 Form 16 records, and most will never be opened.
+
+app.get("/certs/:certificateNo", (req, res) => {
+  const cert = data.form16.find((c) => c.certificateNo === req.params.certificateNo);
+  if (!cert || cert.status !== "Available") {
+    return notFound(res, "Certificate not found or not yet available");
+  }
+  const supplier = data.suppliers.find((s) => s.vendorCode === cert.vendorCode);
+  if (!supplier) return notFound(res, "Vendor not found for this certificate");
+
+  const type = req.query.type === "26as" ? "26as" : "16a";
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="${cert.certificateNo}-${type}.pdf"`);
+
+  const doc = new PDFDocument({ size: "A4", margin: 0, info: { Title: `${cert.certificateNo} (${type === "16a" ? "Form 16A" : "Form 26AS"})` } });
+  doc.pipe(res);
+
+  if (type === "16a") {
+    renderForm16A(doc, cert, supplier);
+  } else {
+    const allCertsForYear = data.form16.filter(
+      (c) => c.vendorCode === cert.vendorCode && c.financialYear === cert.financialYear && c.status === "Available"
+    );
+    renderForm26AS(doc, cert, supplier, allCertsForYear);
+  }
+  doc.end();
 });
 
 app.listen(PORT, () => {

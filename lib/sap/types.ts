@@ -47,7 +47,12 @@ export interface Form16Result {
   tdsAmount: number;
   currency: string;
   status: "Available" | "Not Yet Generated" | "Under Processing";
-  downloadUrl: string | null;
+  // Form 16A (the quarterly TDS certificate SAP/the deductor actually
+  // issues) vs. Form 26AS (the annual tax credit statement) are different
+  // documents from different sources — see s4hana-connector.ts for why
+  // downloadUrlForm26AS is always null there.
+  downloadUrlForm16A: string | null;
+  downloadUrlForm26AS: string | null;
 }
 
 export interface PurchaseOrderResult {

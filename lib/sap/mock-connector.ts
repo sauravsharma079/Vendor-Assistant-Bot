@@ -64,9 +64,19 @@ export class MockSapConnector implements SapConnector {
   }
 
   async getForm16(vendorCode: string, financialYear: string): Promise<Form16Result | null> {
-    return mockGet<Form16Result>(
+    // mock-sap-server returns a single relative path (e.g. "/certs/FORM16A-2025-Q1-100001")
+    // when the certificate is Available, null otherwise — /certs/:certificateNo
+    // serves Form 16A by default and Form 26AS via ?type=26as (see mock-sap-server/certs.js).
+    const cert = await mockGet<Omit<Form16Result, "downloadUrlForm16A" | "downloadUrlForm26AS"> & { downloadUrl: string | null }>(
       `/api/form16?vendorCode=${encodeURIComponent(vendorCode.trim())}&financialYear=${encodeURIComponent(financialYear.trim())}`
     );
+    if (!cert) return null;
+    const { downloadUrl, ...rest } = cert;
+    return {
+      ...rest,
+      downloadUrlForm16A: downloadUrl ? `${baseUrl()}${downloadUrl}` : null,
+      downloadUrlForm26AS: downloadUrl ? `${baseUrl()}${downloadUrl}?type=26as` : null,
+    };
   }
 
   async getPurchaseOrder(vendorCode: string, poNumber: string): Promise<PurchaseOrderResult | null> {

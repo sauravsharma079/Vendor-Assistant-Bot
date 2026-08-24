@@ -288,15 +288,17 @@ function buildAdditionalDataset() {
       const baseAmount = unitPrice * randInt(20, 80);
       const tdsAmount = Math.round(baseAmount * 0.01 * (qi === 0 ? 1 : 0.4));
       const status = pick(["Available", "Available", "Under Processing", "Not Yet Generated"]);
+      const certificateNo = `FORM16A-2025-${quarter}-${vendorCode}`;
       form16.push({
         vendorCode,
-        certificateNo: `FORM16A-2025-${quarter}-${vendorCode}`,
+        certificateNo,
         financialYear: "2025-26",
         quarter,
+        paidAmount: baseAmount,
         tdsAmount,
         currency: "INR",
         status,
-        downloadUrl: status === "Available" ? `https://mock-sap.example.com/certs/FORM16A-2025-${quarter}-${vendorCode}.pdf` : null,
+        downloadUrl: status === "Available" ? `/certs/${certificateNo}` : null,
       });
     });
   }

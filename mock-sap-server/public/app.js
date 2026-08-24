@@ -127,6 +127,9 @@ function renderTable(rows, statusKey) {
           const value = row[c];
           if (c === statusKey) return `<td>${statusBadge(value)}</td>`;
           if (value === null || value === undefined || value === "") return "<td>—</td>";
+          if (c === "downloadUrl") {
+            return `<td><a href="${value}" target="_blank" rel="noreferrer">Form 16A</a> · <a href="${value}?type=26as" target="_blank" rel="noreferrer">Form 26AS</a></td>`;
+          }
           if (typeof value === "number") return `<td>${value.toLocaleString("en-IN")}</td>`;
           return `<td>${value}</td>`;
         })

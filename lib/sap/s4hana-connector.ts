@@ -344,7 +344,13 @@ export class RealS4HanaConnector implements SapConnector {
         tdsAmount: parseFloat(cert.WithholdingTaxAmount),
         currency: cert.Currency,
         status,
-        downloadUrl: cert.DownloadUrl ?? null,
+        downloadUrlForm16A: cert.DownloadUrl ?? null,
+        // Form 26AS is not a SAP document — it's the Income Tax Department's
+        // own annual tax credit statement (viewable/downloadable exclusively
+        // via the government's TRACES portal, using the vendor's own PAN
+        // login). No SAP tenant can serve this, so it's always null here —
+        // vendors need to get it directly from TRACES, not through this app.
+        downloadUrlForm26AS: null,
       };
     } catch (err) {
       if (err instanceof SapRequestError && err.status === 404) return null;
