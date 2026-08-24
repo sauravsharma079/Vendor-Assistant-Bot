@@ -330,6 +330,47 @@ function downloadStatementExcel(s: StatementData) {
   XLSX.writeFile(wb, `account-statement-${dateFrom}-to-${dateTo}.xlsx`);
 }
 
+function formatDateShort(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+// A labeled summary card replaces the dense run-on sentence the raw
+// resolver summary would otherwise read as — the same figures, laid out
+// so each one is scannable rather than crammed into one sentence.
+function StatementSummaryCard({ s }: { s: StatementData }) {
+  const totalInvoiced = s.invoices.reduce((sum, i) => sum + i.amount, 0);
+  const totalCleared = s.paidInvoices.reduce((sum, i) => sum + i.amount, 0);
+  const money = (n: number) => `${s.currency} ${n.toLocaleString("en-IN")}`;
+
+  const rows: [string, string][] = [
+    ["Period", `${formatDateShort(s.dateFrom)} – ${formatDateShort(s.dateTo)}`],
+    ["Total invoiced", `${money(totalInvoiced)} (${s.invoices.length} invoice${s.invoices.length === 1 ? "" : "s"})`],
+    ["Cleared", money(totalCleared)],
+    ["Outstanding", money(s.totalOutstanding)],
+    ["Payable this month", money(s.totalPayableThisMonth)],
+    ["Payable this quarter", money(s.totalPayableThisQuarter)],
+    ["Pending approval", `${s.pendingApprovalInvoices.length} invoice${s.pendingApprovalInvoices.length === 1 ? "" : "s"}`],
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-black/10">
+      <div className="bg-[#0f1729] px-4 py-2.5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-[#C9A227]">Account Statement</p>
+      </div>
+      <div className="divide-y divide-black/5 bg-white">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-center justify-between px-4 py-2 text-sm">
+            <span className="text-[#5b6b7c]">{label}</span>
+            <span className="font-medium text-[#0f1729]">{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function VendorChat() {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -492,7 +533,7 @@ export function VendorChat() {
       };
       pushBot(
         <div>
-          <p>{data.summary}</p>
+          <StatementSummaryCard s={statement} />
           <button
             onClick={() => downloadStatementExcel(statement)}
             className="mt-2 rounded-full bg-[#C9A227] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#A9860E]"
