@@ -117,13 +117,26 @@ function FollowUpPrompt({
         placeholder="e.g. This is marked Approved but I still haven't received payment"
         className="mt-1 w-full rounded-lg border border-black/10 px-2.5 py-1.5 text-xs focus:border-[#C9A227] focus:outline-none disabled:opacity-60"
       />
-      <button
-        type="submit"
-        disabled={mode === "submitting" || !description.trim()}
-        className="mt-1.5 rounded-full bg-[#C9A227] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#A9860E] disabled:opacity-50"
-      >
-        {mode === "submitting" ? "Opening ticket…" : "Open ticket"}
-      </button>
+      <div className="mt-1.5 flex gap-2">
+        <button
+          type="submit"
+          disabled={mode === "submitting" || !description.trim()}
+          className="rounded-full bg-[#C9A227] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#A9860E] disabled:opacity-50"
+        >
+          {mode === "submitting" ? "Opening ticket…" : "Open ticket"}
+        </button>
+        <button
+          type="button"
+          disabled={mode === "submitting"}
+          onClick={() => {
+            setDescription("");
+            setMode("asking");
+          }}
+          className="rounded-full border border-[#0f1729]/15 px-3 py-1.5 text-xs font-medium text-[#0f1729] hover:bg-[#0f1729]/5 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }
