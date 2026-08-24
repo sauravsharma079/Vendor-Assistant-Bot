@@ -53,6 +53,15 @@ function formatDateTime(d: Date) {
   return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+// Auto-resolution against the mock SAP server is genuinely sub-second, so
+// rounding/fixed-decimal formatting to whole or near-whole seconds shows
+// as "0.01s" — technically correct but reads oddly next to "vs. hours/
+// days by email". Milliseconds below 1s, one decimal place at or above.
+function formatDuration(secs: number) {
+  if (secs < 1) return `${Math.round(secs * 1000)}ms`;
+  return `${secs.toFixed(1)}s`;
+}
+
 // ---------------------------------------------------------------------------
 // PDF (jsPDF) — landscape A4, coordinates in points.
 // ---------------------------------------------------------------------------
@@ -294,7 +303,7 @@ export async function exportAnalyticsPdf(data: AnalyticsExportData): Promise<voi
   // Page 5 — response time bar list, full width
   doc.addPage();
   pageHeader("Average Response Time");
-  cardBarList(margin, contentTop, W - margin * 2, contentH, "Avg. response time by type", data.avgResolutionChart, (v) => `${v.toFixed(2)}s`);
+  cardBarList(margin, contentTop, W - margin * 2, contentH, "Avg. response time by type", data.avgResolutionChart, formatDuration);
   pageFooter("5 / 5");
 
   doc.save(`analytics-${fileStamp(data.generatedAt)}.pdf`);
@@ -534,7 +543,7 @@ export async function exportAnalyticsPpt(data: AnalyticsExportData): Promise<voi
   // Slide 5 — response time bar list, full width
   const s5 = pptx.addSlide();
   pageHeader(s5, "Average Response Time");
-  cardBarList(s5, MARGIN, CONTENT_TOP, PAGE_W - MARGIN * 2, CONTENT_H, "Avg. response time by type", data.avgResolutionChart, (v) => `${v.toFixed(2)}s`);
+  cardBarList(s5, MARGIN, CONTENT_TOP, PAGE_W - MARGIN * 2, CONTENT_H, "Avg. response time by type", data.avgResolutionChart, formatDuration);
   pageFooter(s5, "5 / 5");
 
   await pptx.writeFile({ fileName: `analytics-${fileStamp(data.generatedAt)}.pptx` });

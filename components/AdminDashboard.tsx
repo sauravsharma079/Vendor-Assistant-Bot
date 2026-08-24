@@ -22,6 +22,15 @@ function formatDateTime(value: string | Date): string {
   });
 }
 
+// Auto-resolution against the mock SAP server is genuinely sub-second —
+// often just a handful of milliseconds — so rounding to whole seconds
+// erases it entirely (shows "0s", which reads as broken, not fast).
+// Milliseconds below 1s, one decimal place at or above.
+function formatDuration(secs: number): string {
+  if (secs < 1) return `${Math.round(secs * 1000)}ms`;
+  return `${secs.toFixed(1)}s`;
+}
+
 const NAV_ITEMS: { key: Tab; label: string }[] = [
   { key: "analytics", label: "Analytics" },
   { key: "tickets", label: "Incidents" },
@@ -379,8 +388,7 @@ export function AdminDashboard() {
   const autoResolved = queryLog.filter((q) => q.outcome === "auto_resolved").length;
   const total = queryLog.length;
   const autoRate = total > 0 ? Math.round((autoResolved / total) * 100) : 0;
-  const avgResolutionSecs =
-    total > 0 ? Math.round(queryLog.reduce((s, q) => s + q.resolutionSeconds, 0) / total) : 0;
+  const avgResolutionSecs = total > 0 ? queryLog.reduce((s, q) => s + q.resolutionSeconds, 0) / total : 0;
 
   const stateChartData: BarDatum[] = (["open", "in_progress", "resolved"] as Ticket["status"][]).map((s) => ({
     label: STATE_LABEL[s],
@@ -532,7 +540,7 @@ export function AdminDashboard() {
         { label: "Total queries", value: String(total) },
         { label: "Auto-resolved", value: `${autoRate}%`, sub: `${autoResolved} of ${total} — no email, no wait` },
         { label: "Open incidents", value: String(openTickets.length) },
-        { label: "Avg. resolution", value: total > 0 ? `${avgResolutionSecs}s` : "—", sub: "vs. hours/days by email" },
+        { label: "Avg. resolution", value: total > 0 ? formatDuration(avgResolutionSecs) : "—", sub: "vs. hours/days by email" },
         { label: "Escalation rate", value: `${escalationRate}%`, sub: `${escalatedCount} of ${total} queries` },
         { label: "Overdue incidents", value: String(overdueTickets.length), sub: "past SLA due date, not resolved" },
         { label: "Distinct vendors served", value: String(distinctVendors) },
@@ -620,7 +628,7 @@ export function AdminDashboard() {
               value={String(openTickets.length)}
               tone={openTickets.length > 0 ? "warning" : "neutral"}
             />
-            <StatCard label="Avg. resolution" value={total > 0 ? `${avgResolutionSecs}s` : "—"} sub="vs. hours/days by email" />
+            <StatCard label="Avg. resolution" value={total > 0 ? formatDuration(avgResolutionSecs) : "—"} sub="vs. hours/days by email" />
           </div>
           {total === 0 && (
             <p className="mt-2 text-[11px] text-[#5b6b7c]">
@@ -668,11 +676,7 @@ export function AdminDashboard() {
               <RankedBarChart title="Top vendors by query volume" data={topVendorsData} />
             </div>
 
-            <BarChart
-              title="Avg. response time by type"
-              data={avgResolutionByType}
-              valueFormatter={(v) => `${v.toFixed(2)}s`}
-            />
+            <BarChart title="Avg. response time by type" data={avgResolutionByType} valueFormatter={formatDuration} />
           </>
         )}
 
@@ -1072,7 +1076,7 @@ function QueryLogTable({ entries }: { entries: QueryLogEntry[] }) {
                   {e.responseSummary}
                 </p>
               </td>
-              <td className="px-4 py-3 whitespace-nowrap text-[#5b6b7c]">{e.resolutionSeconds.toFixed(1)}s</td>
+              <td className="px-4 py-3 whitespace-nowrap text-[#5b6b7c]">{formatDuration(e.resolutionSeconds)}</td>
             </tr>
           ))}
         </tbody>
