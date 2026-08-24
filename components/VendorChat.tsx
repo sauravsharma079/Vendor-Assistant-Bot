@@ -15,11 +15,17 @@ interface Message {
 
 type Step = "identity" | "otp" | "menu" | "reference" | "done";
 
+// The menu only ever offers these four — general_inquiry is reached
+// exclusively through the AI free-text layer (see resolveGeneralInquiry
+// in lib/resolver.ts), never a button, so it's excluded here.
+const MENU_QUERY_TYPES: QueryType[] = ["invoice_status", "payment_status", "form16", "account_statement"];
+
 const QUERY_LABELS: Record<QueryType, string> = {
   invoice_status: "Invoice status",
   payment_status: "Payment status",
   form16: "Form 16A / Form 26AS / TDS",
   account_statement: "Account statement",
+  general_inquiry: "General inquiry",
 };
 
 const REFERENCE_PROMPTS: Record<QueryType, string> = {
@@ -27,6 +33,7 @@ const REFERENCE_PROMPTS: Record<QueryType, string> = {
   payment_status: "What's the invoice number? (Leave blank to see all recent payments.)",
   form16: "Which financial year? (e.g. 2025-26)",
   account_statement: "Which date range? (e.g. 2025-04-01:2026-03-31, or leave blank for the current financial year)",
+  general_inquiry: "What do you need help with?",
 };
 
 const REFERENCE_PLACEHOLDERS: Record<QueryType, string> = {
@@ -34,6 +41,7 @@ const REFERENCE_PLACEHOLDERS: Record<QueryType, string> = {
   payment_status: "Invoice number, or leave blank for all",
   form16: "e.g. 2025-26",
   account_statement: "e.g. 2025-04-01:2026-03-31",
+  general_inquiry: "Briefly describe what you need",
 };
 
 let msgId = 0;
@@ -636,7 +644,7 @@ export function VendorChat() {
         {step === "menu" && (
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              {(Object.keys(QUERY_LABELS) as QueryType[]).map((t) => (
+              {MENU_QUERY_TYPES.map((t) => (
                 <button
                   key={t}
                   onClick={() => handleMenuPick(t)}

@@ -42,7 +42,9 @@ const TYPE_LABEL: Record<Ticket["queryType"], string> = {
   payment_status: "Payment status",
   form16: "Form 16A / Form 26AS / TDS",
   account_statement: "Account statement",
+  general_inquiry: "General inquiry",
 };
+const ALL_QUERY_TYPES = Object.keys(TYPE_LABEL) as Ticket["queryType"][];
 
 // Fixed roster — there's no per-user login yet (business support shares one
 // password), so assignment is to a name from this list rather than a real
@@ -394,7 +396,7 @@ export function AdminDashboard() {
     color: OUTCOME_COLOR[o],
   }));
 
-  const typeChartData: BarDatum[] = (["invoice_status", "payment_status", "form16", "account_statement"] as Ticket["queryType"][]).map((qt) => ({
+  const typeChartData: BarDatum[] = ALL_QUERY_TYPES.map((qt) => ({
     label: TYPE_LABEL[qt],
     // Darker gold than the brand accent (#C9A227) — that shade fails the
     // 3:1 mark-vs-surface contrast check on white; this is the same darker
@@ -408,7 +410,7 @@ export function AdminDashboard() {
   const escalationRate = total > 0 ? Math.round((escalatedCount / total) * 100) : 0;
   const distinctVendors = new Set(queryLog.map((q) => q.vendorCode)).size;
 
-  const avgResolutionByType: BarDatum[] = (["invoice_status", "payment_status", "form16", "account_statement"] as Ticket["queryType"][]).map((qt) => {
+  const avgResolutionByType: BarDatum[] = ALL_QUERY_TYPES.map((qt) => {
     const entries = queryLog.filter((q) => q.queryType === qt);
     const avg = entries.length > 0 ? entries.reduce((s, e) => s + e.resolutionSeconds, 0) / entries.length : 0;
     return { label: TYPE_LABEL[qt], value: Number(avg.toFixed(3)), color: "#0f1729" };
@@ -697,6 +699,7 @@ export function AdminDashboard() {
                 <option value="payment_status">Payment status</option>
                 <option value="form16">Form 16A / Form 26AS / TDS</option>
                 <option value="account_statement">Account statement</option>
+                <option value="general_inquiry">General inquiry</option>
               </select>
               <select
                 value={assigneeFilter}
@@ -882,6 +885,7 @@ const PRIORITY_BY_TYPE: Record<Ticket["queryType"], { label: string; className: 
   payment_status: { label: "2 - High", className: "bg-orange-50 text-orange-700 border-orange-200" },
   form16: { label: "3 - Moderate", className: "bg-yellow-50 text-yellow-700 border-yellow-200" },
   account_statement: { label: "3 - Moderate", className: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  general_inquiry: { label: "3 - Moderate", className: "bg-yellow-50 text-yellow-700 border-yellow-200" },
 };
 
 function PriorityBadge({ queryType }: { queryType: Ticket["queryType"] }) {

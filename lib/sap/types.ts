@@ -4,7 +4,7 @@
 // connector for a live one should not require changing anything above
 // this layer.
 
-export type QueryType = "invoice_status" | "payment_status" | "form16" | "account_statement";
+export type QueryType = "invoice_status" | "payment_status" | "form16" | "account_statement" | "general_inquiry";
 
 export interface VendorIdentity {
   vendorCode: string; // SAP Vendor/Supplier (LIFNR)

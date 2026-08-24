@@ -10,6 +10,7 @@ const SLA_HOURS_BY_TYPE: Record<QueryType, number> = {
   payment_status: 24,
   form16: 48,
   account_statement: 24,
+  general_inquiry: 48,
 };
 
 export interface ResolveParams {
@@ -68,6 +69,8 @@ export async function resolveQuery(params: ResolveParams): Promise<ResolveResult
         return await resolveForm16(vendor, params.reference, started);
       case "account_statement":
         return await resolveAccountStatement(vendor, params.reference, started);
+      case "general_inquiry":
+        return await resolveGeneralInquiry(vendor, params.reference, started);
     }
   } catch (err) {
     return sapErrorToResult(err);
@@ -158,6 +161,23 @@ export async function openFollowUpTicket(
     throw new Error("escalate() unexpectedly returned a non-escalated result");
   }
   return { summary: result.summary, ticketId: result.ticketId, slaDueAt: result.slaDueAt };
+}
+
+// Reached only via the AI free-text layer, when parseVendorIntent()
+// recognizes a legitimate vendor request that's genuinely outside the
+// other four self-service types (e.g. "update my vendor address") — never
+// a SAP lookup, always a direct, immediate escalation using the vendor's
+// own message as the ticket description, so they aren't asked to repeat
+// themselves.
+async function resolveGeneralInquiry(vendor: VendorIdentity, reference: string, started: number): Promise<ResolveResult> {
+  const message = reference.trim() || "No further details were provided.";
+  return escalate(
+    vendor,
+    "general_inquiry",
+    reference,
+    `This isn't something covered by self-service lookups. Your request has been shared with our Business Support team: "${message}".`,
+    started
+  );
 }
 
 async function resolveInvoice(vendor: VendorIdentity, reference: string, started: number): Promise<ResolveResult> {

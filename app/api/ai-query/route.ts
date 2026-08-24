@@ -36,20 +36,26 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // general_inquiry has no invoice/PO/FY/date-range to extract — the
+    // vendor's own message *is* the request, so it goes to the ticket
+    // verbatim rather than through the LLM's (here, irrelevant) reference
+    // extraction.
+    const reference = intent.queryType === "general_inquiry" ? message : intent.reference;
+
     const result = await resolveQuery({
       vendor: { vendorCode: session.vendorCode, vendorName: session.vendorName, email: session.email },
       queryType: intent.queryType,
-      reference: intent.reference,
+      reference,
     });
 
     // queryType/reference are echoed back so the client can offer a
     // "still need help?" follow-up ticket against the same resolved query.
     if (result.kind === "resolved" || result.kind === "escalated") {
       const phrased = await phraseResponse(message, result.summary);
-      return NextResponse.json({ ...result, summary: phrased, queryType: intent.queryType, reference: intent.reference });
+      return NextResponse.json({ ...result, summary: phrased, queryType: intent.queryType, reference });
     }
 
-    return NextResponse.json({ ...result, queryType: intent.queryType, reference: intent.reference });
+    return NextResponse.json({ ...result, queryType: intent.queryType, reference });
   } catch (err) {
     if (err instanceof LlmNotConfiguredError) {
       return NextResponse.json({ error: err.message }, { status: 503 });
