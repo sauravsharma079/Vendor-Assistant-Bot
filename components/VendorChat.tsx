@@ -63,6 +63,27 @@ function FollowUpPrompt({
 }) {
   const [mode, setMode] = useState<"asking" | "describing" | "submitting">("asking");
   const [description, setDescription] = useState("");
+  const [secondsLeft, setSecondsLeft] = useState(30);
+
+  // Auto-resolve if the vendor never responds to "still need help?" — ticks
+  // once a second only while still in the "asking" state, so it stops the
+  // moment they pick either option and never fires while they're mid-way
+  // through describing a ticket.
+  useEffect(() => {
+    if (mode !== "asking") return;
+    const interval = setInterval(() => setSecondsLeft((s) => s - 1), 1000);
+    return () => clearInterval(interval);
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "asking" || secondsLeft > 0) return;
+    onSettled(
+      <span className="text-xs text-[#5b6b7c]">
+        No response, so this was automatically marked as resolved. Still need help? Just ask another question.
+      </span>
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secondsLeft, mode]);
 
   async function submitTicket(e: React.FormEvent) {
     e.preventDefault();
@@ -110,6 +131,7 @@ function FollowUpPrompt({
             I still need help
           </button>
         </div>
+        <p className="mt-1 text-[11px] text-[#9aa4b2]">Auto-resolving in {secondsLeft}s if there's no response.</p>
       </div>
     );
   }
