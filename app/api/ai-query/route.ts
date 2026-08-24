@@ -36,11 +36,21 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // general_inquiry has no invoice/PO/FY/date-range to extract — the
-    // vendor's own message *is* the request, so it goes to the ticket
-    // verbatim rather than through the LLM's (here, irrelevant) reference
-    // extraction.
-    const reference = intent.queryType === "general_inquiry" ? message : intent.reference;
+    // general_inquiry is never auto-submitted as a ticket — the vendor
+    // confirms (and can add to) their own message first. The client shows
+    // an editable box pre-filled with `reference` and only actually opens
+    // the ticket via a separate POST to /api/follow-up once they submit.
+    if (intent.queryType === "general_inquiry") {
+      return NextResponse.json({
+        kind: "confirm_ticket",
+        queryType: "general_inquiry",
+        reference: message,
+        message:
+          "I don't have a self-service answer for that, but I can pass it to our Business Support team. Add any more details below, then send it — or send as-is.",
+      });
+    }
+
+    const reference = intent.reference;
 
     const result = await resolveQuery({
       vendor: { vendorCode: session.vendorCode, vendorName: session.vendorName, email: session.email },

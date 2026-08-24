@@ -135,11 +135,15 @@ async function escalate(
   });
 
   const ticketRef = formatTicketReference(ticket.id);
+  // `reason` can be raw, unpunctuated vendor text (e.g. a general_inquiry
+  // description) as well as an already-punctuated system-generated one —
+  // this keeps the join grammatical either way.
+  const reasonSentence = /[.!?]$/.test(reason.trim()) ? reason.trim() : `${reason.trim()}.`;
 
   return {
     kind: "escalated",
     summary:
-      `${reason} This has been escalated to our business support team for review ` +
+      `${reasonSentence} This has been escalated to our business support team for review ` +
       `(reference ${ticketRef}), with a response expected within ${slaHours} hours.`,
     ticketId: ticketRef,
     slaDueAt,

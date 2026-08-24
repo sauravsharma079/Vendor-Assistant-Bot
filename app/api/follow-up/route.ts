@@ -3,7 +3,7 @@ import { openFollowUpTicket } from "@/lib/resolver";
 import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import type { QueryType } from "@/lib/sap/types";
 
-const VALID_TYPES: QueryType[] = ["invoice_status", "payment_status", "form16", "account_statement"];
+const VALID_TYPES: QueryType[] = ["invoice_status", "payment_status", "form16", "account_statement", "general_inquiry"];
 
 // A vendor already got an answer from /api/query or /api/ai-query but still
 // needs help with it — this opens a business support ticket with their own

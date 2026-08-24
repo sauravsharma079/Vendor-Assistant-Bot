@@ -149,6 +149,77 @@ function FollowUpPrompt({
   );
 }
 
+// Shown when the AI layer recognizes a request outside self-service scope
+// (general_inquiry) — the vendor's own message is pre-filled and editable,
+// and nothing is sent to Business Support until they explicitly submit.
+function ConfirmTicketPrompt({
+  initialText,
+  onSettled,
+}: {
+  initialText: string;
+  onSettled: (content: React.ReactNode) => void;
+}) {
+  const [description, setDescription] = useState(initialText);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submitTicket(e: React.FormEvent) {
+    e.preventDefault();
+    if (!description.trim()) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/follow-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queryType: "general_inquiry", reference: description.trim(), description: description.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        onSettled(<span className="text-red-700">{data.error || "Couldn't send that right now. Please try again."}</span>);
+      } else {
+        onSettled(
+          <div>
+            <p>{data.summary}</p>
+            <p className="mt-1 text-xs text-[#5b6b7c]">
+              Reference this ticket ID with business support if you follow up: <b>{data.ticketId}</b>
+            </p>
+          </div>
+        );
+      }
+    } catch {
+      onSettled(<span className="text-red-700">Something went wrong sending that. Please try again.</span>);
+    }
+  }
+
+  return (
+    <form onSubmit={submitTicket} className="mt-1">
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        rows={2}
+        disabled={submitting}
+        className="mt-1 w-full rounded-lg border border-black/10 px-2.5 py-1.5 text-xs focus:border-[#C9A227] focus:outline-none disabled:opacity-60"
+      />
+      <div className="mt-1.5 flex gap-2">
+        <button
+          type="submit"
+          disabled={submitting || !description.trim()}
+          className="rounded-full bg-[#C9A227] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#A9860E] disabled:opacity-50"
+        >
+          {submitting ? "Sending…" : "Send to Business Support"}
+        </button>
+        <button
+          type="button"
+          disabled={submitting}
+          onClick={() => onSettled(<span className="text-xs text-[#5b6b7c]">No problem — let me know if there's anything else I can help with.</span>)}
+          className="rounded-full border border-[#0f1729]/15 px-3 py-1.5 text-xs font-medium text-[#0f1729] hover:bg-[#0f1729]/5 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 interface StatementData {
   dateFrom: string;
   dateTo: string;
@@ -535,6 +606,39 @@ export function VendorChat() {
         );
       } else if (data.kind === "clarify") {
         pushBot(<div>{data.message}</div>);
+      } else if (data.kind === "confirm_ticket") {
+        const confirmMsgId = nextId();
+        setMessages((m) => [
+          ...m,
+          {
+            id: confirmMsgId,
+            sender: "bot",
+            content: (
+              <div>
+                <p>{data.message}</p>
+                <ConfirmTicketPrompt
+                  initialText={data.reference ?? ""}
+                  onSettled={(content) =>
+                    setMessages((m2) => m2.map((msg) => (msg.id === confirmMsgId ? { ...msg, content } : msg)))
+                  }
+                />
+              </div>
+            ),
+          },
+          {
+            id: nextId(),
+            sender: "bot",
+            content: (
+              <button
+                onClick={resetToMenu}
+                className="mt-1 rounded-full border border-[#0f1729]/15 px-3 py-1 text-xs font-medium text-[#0f1729] hover:bg-[#0f1729]/5"
+              >
+                Ask another question
+              </button>
+            ),
+          },
+        ]);
+        setStep("done");
       } else if (data.kind === "system_error") {
         pushBot(<div className="text-red-700">{data.message}</div>);
         setStep("done");
