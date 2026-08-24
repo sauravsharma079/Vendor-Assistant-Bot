@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
-import type { QueryType, InvoiceStatusResult, PaymentStatusResult } from "@/lib/sap/types";
+import type { QueryType, InvoiceStatusResult, PaymentStatusResult, PurchaseOrderResult } from "@/lib/sap/types";
 import type { AgingBucket } from "@/lib/resolver";
 
 type Sender = "bot" | "vendor";
@@ -336,6 +336,39 @@ function formatDateShort(iso: string): string {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
+// Shown under an invoice_status answer whenever the resolver found a
+// matching purchase order (see resolveInvoice in lib/resolver.ts) — the
+// PO's own quantity/price/delivery details, not just the bare PO number
+// the invoice summary already mentions.
+function PurchaseOrderCard({ po }: { po: PurchaseOrderResult }) {
+  const rows: [string, string][] = [
+    ["PO number", po.poNumber],
+    ["Description", po.description],
+    ["Quantity", `${po.quantity.toLocaleString("en-IN")} ${po.unit}`],
+    ["Unit price", `${po.currency} ${po.unitPrice.toLocaleString("en-IN")}`],
+    ["PO value", `${po.currency} ${po.totalValue.toLocaleString("en-IN")}`],
+    ["PO status", po.status],
+    ["Created", formatDateShort(po.createdDate)],
+    ...(po.expectedDeliveryDate ? [["Expected delivery", formatDateShort(po.expectedDeliveryDate)] as [string, string]] : []),
+  ];
+
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl border border-black/10">
+      <div className="bg-[#0f1729] px-4 py-2.5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-[#C9A227]">Purchase Order Details</p>
+      </div>
+      <div className="divide-y divide-black/5 bg-white">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-center justify-between px-4 py-2 text-sm">
+            <span className="text-[#5b6b7c]">{label}</span>
+            <span className="font-medium text-[#0f1729]">{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // A labeled summary card replaces the dense run-on sentence the raw
 // resolver summary would otherwise read as — the same figures, laid out
 // so each one is scannable rather than crammed into one sentence.
@@ -492,7 +525,7 @@ export function VendorChat() {
   // which for the AI flow may differ from client-side state) are what the
   // "still need help?" follow-up ticket is filed against.
   function pushResolveResult(
-    data: { kind: string; summary?: string; ticketId?: string } & Partial<StatementData>,
+    data: { kind: string; summary?: string; ticketId?: string; data?: unknown } & Partial<StatementData>,
     resolvedQueryType: QueryType | null,
     resolvedReference: string
   ) {
@@ -553,7 +586,13 @@ export function VendorChat() {
       );
       setStep("done");
     } else if (data.kind === "resolved") {
-      pushBot(<div>{data.summary}</div>);
+      const purchaseOrder = (data.data as { purchaseOrder?: PurchaseOrderResult | null } | undefined)?.purchaseOrder;
+      pushBot(
+        <div>
+          <p>{data.summary}</p>
+          {purchaseOrder && <PurchaseOrderCard po={purchaseOrder} />}
+        </div>
+      );
       pushFollowUp();
       pushBot(
         <button

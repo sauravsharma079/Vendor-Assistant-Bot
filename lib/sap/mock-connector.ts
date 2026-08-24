@@ -4,6 +4,7 @@ import type {
   InvoiceStatusResult,
   PaymentStatusResult,
   Form16Result,
+  PurchaseOrderResult,
 } from "./types";
 import { SapNotConfiguredError, SapRequestError } from "./s4hana-connector";
 
@@ -66,6 +67,15 @@ export class MockSapConnector implements SapConnector {
     return mockGet<Form16Result>(
       `/api/form16?vendorCode=${encodeURIComponent(vendorCode.trim())}&financialYear=${encodeURIComponent(financialYear.trim())}`
     );
+  }
+
+  async getPurchaseOrder(vendorCode: string, poNumber: string): Promise<PurchaseOrderResult | null> {
+    // /api/purchase-orders always returns an array (unlike /api/invoices,
+    // which special-cases a single-record response when `ref` is given).
+    const result = await mockGet<PurchaseOrderResult[]>(
+      `/api/purchase-orders?vendorCode=${encodeURIComponent(vendorCode.trim())}&poNumber=${encodeURIComponent(poNumber.trim())}`
+    );
+    return result?.[0] ?? null;
   }
 
   async listInvoices(vendorCode: string, dateFrom?: string, dateTo?: string): Promise<InvoiceStatusResult[]> {

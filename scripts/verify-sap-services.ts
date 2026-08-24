@@ -1,11 +1,12 @@
 /**
- * Pre-demo check: confirms all four SAP OData service paths this app
+ * Pre-demo check: confirms all five SAP OData service paths this app
  * depends on actually resolve against the connected tenant, before
- * anyone runs the vendor portal in front of a client. The vendor and
- * invoice paths are standard SAP-released services and should just work;
- * the payment and Form 16 paths are best-effort guesses at custom CDS
- * view names (see lib/sap/s4hana-connector.ts) and are the ones most
- * likely to need a SAP_S4_*_SERVICE_PATH override in .env.local.
+ * anyone runs the vendor portal in front of a client. The vendor,
+ * invoice, and purchase order paths are standard SAP-released services
+ * and should just work; the payment and Form 16 paths are best-effort
+ * guesses at custom CDS view names (see lib/sap/s4hana-connector.ts) and
+ * are the ones most likely to need a SAP_S4_*_SERVICE_PATH override in
+ * .env.local.
  *
  * Usage: npm run verify:sap
  */
@@ -143,6 +144,7 @@ async function main() {
     ["Invoice status", "SAP_S4_INVOICE_SERVICE_PATH", SAP_SERVICE_PATHS.invoice],
     ["Payment status", "SAP_S4_PAYMENT_SERVICE_PATH", SAP_SERVICE_PATHS.payment],
     ["Form 16 / TDS certificate", "SAP_S4_FORM16_SERVICE_PATH", SAP_SERVICE_PATHS.form16],
+    ["Purchase order details", "SAP_S4_PO_ITEM_SERVICE_PATH", SAP_SERVICE_PATHS.purchaseOrderItem],
   ];
 
   const results: CheckResult[] = [];

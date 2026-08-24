@@ -45,7 +45,7 @@ data isolation" below for how this is enforced.
    - Business support / SLA dashboard: http://localhost:3000/admin
      (password-gated — see "Business support access" below)
 4. **Before demoing to the client**, run `npm run verify:sap` to confirm
-   all four SAP service paths actually resolve against your sandbox —
+   all five SAP service paths actually resolve against your sandbox —
    see "SAP service paths" below for why this matters.
 
 Until SAP is configured, the app runs fine but every query correctly
@@ -113,16 +113,16 @@ page, so hitting the APIs directly without a session is rejected too.
 
 ## SAP service paths
 
-Vendor verification and invoice status use standard SAP-released
-services and should work as written. Payment status and Form 16 use
-best-effort guesses at custom CDS view names
+Vendor verification, invoice status, and purchase order details use
+standard SAP-released services and should work as written. Payment status
+and Form 16 use best-effort guesses at custom CDS view names
 (`SAP_S4_PAYMENT_SERVICE_PATH`, `SAP_S4_FORM16_SERVICE_PATH` in
 `lib/sap/s4hana-connector.ts`) — no single standard service covers either
-in most tenants. All four paths are env-var overridable
+in most tenants. All five paths are env-var overridable
 (see `.env.example`), so if a guess is wrong, it's a config change in
 `.env.local`, not a code change and redeploy.
 
-Run `npm run verify:sap` against the real sandbox to check all four
+Run `npm run verify:sap` against the real sandbox to check all five
 before a demo — it authenticates and probes each path, and tells you
 exactly which env var to set if one doesn't resolve.
 

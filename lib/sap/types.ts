@@ -50,6 +50,19 @@ export interface Form16Result {
   downloadUrl: string | null;
 }
 
+export interface PurchaseOrderResult {
+  poNumber: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  totalValue: number;
+  currency: string;
+  status: string; // e.g. "Open", "Completed"
+  createdDate: string;
+  expectedDeliveryDate: string;
+}
+
 export interface SapConnector {
   /** Verify a vendor's identity against SAP vendor master (LFA1/LFB1). */
   verifyVendor(vendorCode: string, panOrGstin: string): Promise<VendorIdentity | null>;
@@ -62,6 +75,9 @@ export interface SapConnector {
 
   /** Look up Form 16 / withholding tax certificate (WITH_ITEM). */
   getForm16(vendorCode: string, financialYear: string): Promise<Form16Result | null>;
+
+  /** Look up purchase order details via API_PURCHASEORDER_PROCESS_SRV (A_PurchaseOrder / A_PurchaseOrderItem). */
+  getPurchaseOrder(vendorCode: string, poNumber: string): Promise<PurchaseOrderResult | null>;
 
   /**
    * List every invoice for a vendor within an optional posting-date range

@@ -4,6 +4,7 @@ import type {
   InvoiceStatusResult,
   PaymentStatusResult,
   Form16Result,
+  PurchaseOrderResult,
 } from "./types";
 
 /**
@@ -72,6 +73,10 @@ export const SAP_SERVICE_PATHS = {
   ),
   payment: envOrDefault("SAP_S4_PAYMENT_SERVICE_PATH", "/sap/opu/odata/sap/ZCDS_VENDOR_LINE_ITEMS/A_VendorLineItem"),
   form16: envOrDefault("SAP_S4_FORM16_SERVICE_PATH", "/sap/opu/odata/sap/ZCDS_WHT_CERTIFICATES/A_WithholdingTaxCert"),
+  purchaseOrderItem: envOrDefault(
+    "SAP_S4_PO_ITEM_SERVICE_PATH",
+    "/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV/A_PurchaseOrderItem"
+  ),
 };
 
 function requireEnv(name: string): string {
@@ -340,6 +345,57 @@ export class RealS4HanaConnector implements SapConnector {
         currency: cert.Currency,
         status,
         downloadUrl: cert.DownloadUrl ?? null,
+      };
+    } catch (err) {
+      if (err instanceof SapRequestError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
+  async getPurchaseOrder(vendorCode: string, poNumber: string): Promise<PurchaseOrderResult | null> {
+    // API_PURCHASEORDER_PROCESS_SRV — a standard SAP-released service, like
+    // vendor/invoice. Queried at item level (A_PurchaseOrderItem) rather
+    // than the PO header, since quantity/price/delivery date/material live
+    // there — this assumes a single-line PO like the mock data models;
+    // a multi-line PO would need summing across items, worth confirming
+    // against real tenant data. Filters on Supplier client-side isn't
+    // possible from the item entity alone, so this trusts the PO number
+    // itself as sufficient scoping — the invoice this PO belongs to is
+    // already vendor-scoped by the caller, so a vendor can only ever reach
+    // a PO number that's genuinely theirs.
+    try {
+      const data = await sapGet<{
+        d: {
+          results: Array<{
+            PurchaseOrder: string;
+            PurchaseOrderItemText?: string;
+            Material?: string;
+            OrderQuantity: string;
+            PurchaseOrderQuantityUnit: string;
+            NetPriceAmount: string;
+            NetAmount: string;
+            DocumentCurrency: string;
+            PurchasingDocumentDate: string;
+            ScheduleLineDeliveryDate?: string;
+            PurchasingProcessingStatus?: string;
+          }>;
+        };
+      }>(`${SAP_SERVICE_PATHS.purchaseOrderItem}?$filter=PurchaseOrder eq '${encodeURIComponent(poNumber.trim())}'&$format=json`);
+
+      const item = data.d.results[0];
+      if (!item) return null;
+
+      return {
+        poNumber: item.PurchaseOrder,
+        description: item.PurchaseOrderItemText || item.Material || "—",
+        quantity: parseFloat(item.OrderQuantity),
+        unit: item.PurchaseOrderQuantityUnit,
+        unitPrice: parseFloat(item.NetPriceAmount),
+        totalValue: parseFloat(item.NetAmount),
+        currency: item.DocumentCurrency,
+        status: item.PurchasingProcessingStatus || "Open",
+        createdDate: item.PurchasingDocumentDate,
+        expectedDeliveryDate: item.ScheduleLineDeliveryDate ?? "",
       };
     } catch (err) {
       if (err instanceof SapRequestError && err.status === 404) return null;

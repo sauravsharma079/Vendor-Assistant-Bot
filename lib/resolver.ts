@@ -221,7 +221,11 @@ async function resolveInvoice(vendor: VendorIdentity, reference: string, started
     resolutionSeconds: (Date.now() - started) / 1000,
   });
 
-  return { kind: "resolved", summary, data: invoice };
+  // Best-effort enrichment — a PO lookup failure shouldn't cost the vendor
+  // their (already-correct) invoice answer, it just means no PO card.
+  const purchaseOrder = await sap.getPurchaseOrder(vendor.vendorCode, invoice.poNumber).catch(() => null);
+
+  return { kind: "resolved", summary, data: { ...invoice, purchaseOrder } };
 }
 
 async function resolvePayment(vendor: VendorIdentity, reference: string, started: number): Promise<ResolveResult> {
