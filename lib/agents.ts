@@ -3,15 +3,15 @@
 // this list rather than a real account. Swap for a real user directory
 // (with real emails) once individual accounts exist.
 //
-// Emails use the same +alias convention as the curated demo vendors, so
-// assignment notifications actually land somewhere visible during local
-// testing instead of a fictional address. Update these to real agent
-// inboxes before using this with an actual business support team.
+// All four route to the same shared inbox for now — update this mapping
+// once each agent has their own real address.
 export const AGENTS = ["Priya Nair", "Rahul Mehta", "Vikram Rao", "Sanya Kapoor"] as const;
 
+const SHARED_AGENT_INBOX = "source2pay.ai@gmail.com";
+
 export const AGENT_EMAILS: Record<string, string> = {
-  "Priya Nair": "sauravsharma079+priyanair@gmail.com",
-  "Rahul Mehta": "sauravsharma079+rahulmehta@gmail.com",
-  "Vikram Rao": "sauravsharma079+vikramrao@gmail.com",
-  "Sanya Kapoor": "sauravsharma079+sanyakapoor@gmail.com",
+  "Priya Nair": SHARED_AGENT_INBOX,
+  "Rahul Mehta": SHARED_AGENT_INBOX,
+  "Vikram Rao": SHARED_AGENT_INBOX,
+  "Sanya Kapoor": SHARED_AGENT_INBOX,
 };
