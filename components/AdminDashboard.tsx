@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Ticket, QueryLogEntry, AuditLogEntry } from "@/lib/store/types";
 import { formatTicketReference } from "@/lib/ticket-ref";
 import { exportAnalyticsPdf, exportAnalyticsPpt, type AnalyticsExportData } from "@/lib/analytics-export";
+import { AGENTS } from "@/lib/agents";
 
 type Tab = "analytics" | "tickets" | "log" | "audit";
 
@@ -45,7 +46,13 @@ const TAB_TITLES: Record<Tab, { eyebrow: string; title: string }> = {
   audit: { eyebrow: "Audit Trail", title: "System Audit Trail" },
 };
 
-const STATE_LABEL: Record<Ticket["status"], string> = { open: "New", in_progress: "In Progress", resolved: "Resolved" };
+const STATE_LABEL: Record<Ticket["status"], string> = {
+  open: "New",
+  in_progress: "In Progress",
+  waiting_for_info: "Waiting for Info",
+  resolved: "Resolved",
+};
+const ALL_STATES = Object.keys(STATE_LABEL) as Ticket["status"][];
 const TYPE_LABEL: Record<Ticket["queryType"], string> = {
   invoice_status: "Invoice status",
   payment_status: "Payment status",
@@ -54,11 +61,6 @@ const TYPE_LABEL: Record<Ticket["queryType"], string> = {
   general_inquiry: "General inquiry",
 };
 const ALL_QUERY_TYPES = Object.keys(TYPE_LABEL) as Ticket["queryType"][];
-
-// Fixed roster — there's no per-user login yet (business support shares one
-// password), so assignment is to a name from this list rather than a real
-// account. Swap for a real user directory once individual accounts exist.
-const AGENTS = ["Priya Nair", "Rahul Mehta", "Vikram Rao", "Sanya Kapoor"];
 
 interface SavedView {
   name: string;
@@ -118,6 +120,7 @@ function todayStamp() {
 const STATE_COLOR: Record<Ticket["status"], string> = {
   open: "#2563eb",
   in_progress: "#d97706",
+  waiting_for_info: "#7c3aed",
   resolved: "#059669",
 };
 const OUTCOME_COLOR: Record<QueryLogEntry["outcome"], string> = {
@@ -390,7 +393,7 @@ export function AdminDashboard() {
   const autoRate = total > 0 ? Math.round((autoResolved / total) * 100) : 0;
   const avgResolutionSecs = total > 0 ? queryLog.reduce((s, q) => s + q.resolutionSeconds, 0) / total : 0;
 
-  const stateChartData: BarDatum[] = (["open", "in_progress", "resolved"] as Ticket["status"][]).map((s) => ({
+  const stateChartData: BarDatum[] = ALL_STATES.map((s) => ({
     label: STATE_LABEL[s],
     value: tickets.filter((t) => t.status === s).length,
     color: STATE_COLOR[s],
@@ -448,11 +451,11 @@ export function AdminDashboard() {
     });
   }, [tickets, stateFilter, typeFilter, assigneeFilter, search]);
 
-  async function setStatus(id: string, status: Ticket["status"]) {
+  async function setStatus(id: string, status: Ticket["status"], note?: string) {
     await fetch("/api/tickets", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify({ id, status, note }),
     });
     refresh();
   }
@@ -466,6 +469,18 @@ export function AdminDashboard() {
     refresh();
   }
 
+  // Sends a message to the vendor without changing the ticket's status —
+  // for a plain reply/update that doesn't fit "waiting for info" or "resolved".
+  async function replyTicket(id: string, reply: string) {
+    await fetch("/api/tickets", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, reply }),
+    });
+    refresh();
+  }
+
+  // Assigning a ticket notifies the agent by email — see app/api/tickets/route.ts.
   async function assignTicket(id: string, assignee: string | null) {
     await fetch("/api/tickets", {
       method: "PATCH",
@@ -691,6 +706,7 @@ export function AdminDashboard() {
                 <option value="all">All states</option>
                 <option value="open">New</option>
                 <option value="in_progress">In Progress</option>
+                <option value="waiting_for_info">Waiting for Info</option>
                 <option value="resolved">Resolved</option>
               </select>
               <select
@@ -803,6 +819,7 @@ export function AdminDashboard() {
             tickets={filteredTickets}
             onStatusChange={setStatus}
             onResolve={resolveTicket}
+            onReply={replyTicket}
             onAssign={assignTicket}
           />
         ) : tab === "log" ? (
@@ -876,9 +893,10 @@ function StatCard({
 }
 
 function StateBadge({ status }: { status: Ticket["status"] }) {
-  const map = {
+  const map: Record<Ticket["status"], string> = {
     open: "bg-blue-50 text-blue-700 border-blue-200",
     in_progress: "bg-amber-50 text-amber-700 border-amber-200",
+    waiting_for_info: "bg-violet-50 text-violet-700 border-violet-200",
     resolved: "bg-emerald-50 text-emerald-700 border-emerald-200",
   };
   return <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${map[status]}`}>{STATE_LABEL[status]}</span>;
@@ -897,33 +915,68 @@ function PriorityBadge({ queryType }: { queryType: Ticket["queryType"] }) {
   return <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${p.className}`}>{p.label}</span>;
 }
 
+type NoteMode = "resolve" | "waiting" | "reply";
+
+const NOTE_COPY: Record<NoteMode, { label: string; placeholder: string; hint: string }> = {
+  resolve: {
+    label: "Send & resolve",
+    placeholder: "e.g. This invoice has been released and payment is scheduled for...",
+    hint: "when resolved",
+  },
+  waiting: {
+    label: "Send & mark waiting",
+    placeholder: "e.g. Could you confirm the GRN number for this invoice?",
+    hint: "to ask for more information",
+  },
+  reply: {
+    label: "Send reply",
+    placeholder: "e.g. We're still checking with the plant team, will update you shortly.",
+    hint: "as an update — status stays the same",
+  },
+};
+
 function TicketsTable({
   tickets,
   onStatusChange,
   onResolve,
+  onReply,
   onAssign,
 }: {
   tickets: Ticket[];
-  onStatusChange: (id: string, s: Ticket["status"]) => void;
+  onStatusChange: (id: string, s: Ticket["status"], note?: string) => void;
   onResolve: (id: string, note: string) => void;
+  onReply: (id: string, reply: string) => void;
   onAssign: (id: string, assignee: string | null) => void;
 }) {
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [noteAction, setNoteAction] = useState<{ id: string; mode: NoteMode } | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
 
   if (tickets.length === 0) {
     return <EmptyState text="No incidents match this filter." />;
   }
 
-  function startResolving(id: string) {
-    setResolvingId(id);
+  function startNote(id: string, mode: NoteMode) {
+    setNoteAction({ id, mode });
     setNoteDraft("");
   }
 
-  function submitResolve(id: string) {
-    onResolve(id, noteDraft);
-    setResolvingId(null);
+  function cancelNote() {
+    setNoteAction(null);
     setNoteDraft("");
+  }
+
+  function toggleNote(id: string, mode: NoteMode) {
+    if (noteAction?.id === id && noteAction.mode === mode) cancelNote();
+    else startNote(id, mode);
+  }
+
+  function submitNote() {
+    if (!noteAction || !noteDraft.trim()) return;
+    const { id, mode } = noteAction;
+    if (mode === "resolve") onResolve(id, noteDraft);
+    else if (mode === "waiting") onStatusChange(id, "waiting_for_info", noteDraft);
+    else onReply(id, noteDraft);
+    cancelNote();
   }
 
   return (
@@ -960,7 +1013,7 @@ function TicketsTable({
                   </p>
                   {t.resolutionNote && (
                     <p className="mt-1 truncate text-[11px] italic text-emerald-700" title={t.resolutionNote}>
-                      Reply sent: {t.resolutionNote}
+                      Last message: {t.resolutionNote}
                     </p>
                   )}
                 </td>
@@ -985,17 +1038,31 @@ function TicketsTable({
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   {t.status !== "resolved" && (
-                    <div className="flex gap-1">
-                      {t.status === "open" && (
+                    <div className="flex flex-wrap gap-1">
+                      {t.status !== "in_progress" && (
                         <button
                           onClick={() => onStatusChange(t.id, "in_progress")}
                           className="rounded-full border border-black/10 px-2.5 py-1 text-[11px] hover:bg-black/5"
                         >
-                          Start
+                          In Progress
+                        </button>
+                      )}
+                      {t.status !== "waiting_for_info" && (
+                        <button
+                          onClick={() => toggleNote(t.id, "waiting")}
+                          className="rounded-full border border-black/10 px-2.5 py-1 text-[11px] hover:bg-black/5"
+                        >
+                          Waiting for Info
                         </button>
                       )}
                       <button
-                        onClick={() => (resolvingId === t.id ? setResolvingId(null) : startResolving(t.id))}
+                        onClick={() => toggleNote(t.id, "reply")}
+                        className="rounded-full border border-black/10 px-2.5 py-1 text-[11px] hover:bg-black/5"
+                      >
+                        Reply
+                      </button>
+                      <button
+                        onClick={() => toggleNote(t.id, "resolve")}
                         className="rounded-full bg-[#C9A227] px-2.5 py-1 text-[11px] text-white hover:bg-[#A9860E]"
                       >
                         Resolve
@@ -1004,30 +1071,31 @@ function TicketsTable({
                   )}
                 </td>
               </tr>
-              {resolvingId === t.id && (
+              {noteAction?.id === t.id && (
                 <tr className="border-t border-black/5 bg-[#f6f7f9]">
                   <td colSpan={10} className="px-4 py-3">
                     <div className="flex flex-col gap-2">
                       <label className="text-[11px] font-medium text-[#5b6b7c]">
-                        Reply to {t.vendorName} — this is emailed to {t.vendorEmail} when resolved
+                        Message to {t.vendorName} — emailed to {t.vendorEmail} {NOTE_COPY[noteAction.mode].hint}
                       </label>
                       <textarea
                         value={noteDraft}
                         onChange={(e) => setNoteDraft(e.target.value)}
                         rows={2}
-                        placeholder="e.g. This invoice has been released and payment is scheduled for..."
+                        placeholder={NOTE_COPY[noteAction.mode].placeholder}
                         className="w-full rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-[#C9A227]"
                         autoFocus
                       />
                       <div className="flex gap-2">
                         <button
-                          onClick={() => submitResolve(t.id)}
-                          className="rounded-full bg-[#C9A227] px-3 py-1.5 text-[11px] font-medium text-white hover:bg-[#A9860E]"
+                          onClick={submitNote}
+                          disabled={!noteDraft.trim()}
+                          className="rounded-full bg-[#C9A227] px-3 py-1.5 text-[11px] font-medium text-white hover:bg-[#A9860E] disabled:opacity-50"
                         >
-                          Send &amp; resolve
+                          {NOTE_COPY[noteAction.mode].label}
                         </button>
                         <button
-                          onClick={() => setResolvingId(null)}
+                          onClick={cancelNote}
                           className="rounded-full border border-black/10 px-3 py-1.5 text-[11px] hover:bg-black/5"
                         >
                           Cancel

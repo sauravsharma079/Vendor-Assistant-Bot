@@ -21,7 +21,7 @@ export interface Ticket {
   queryType: QueryType;
   reference: string | null;
   reason: string;
-  status: "open" | "in_progress" | "resolved";
+  status: "open" | "in_progress" | "waiting_for_info" | "resolved";
   slaDueAt: string; // ISO
   queryLogId: string;
   resolutionNote: string | null; // business support's reply, shown to the vendor via email on resolve

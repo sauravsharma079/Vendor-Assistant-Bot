@@ -34,4 +34,37 @@ export class ConsoleEmailSender implements EmailSender {
         `This only appears in the server console and is never sent to the browser.\n`
     );
   }
+
+  async sendTicketUpdate(
+    toEmail: string,
+    vendorName: string,
+    ticketRef: string,
+    note: string,
+    kind: "reply" | "waiting_for_info"
+  ): Promise<void> {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "ConsoleEmailSender cannot run in production. Set EMAIL_MODE=smtp and configure SMTP_* env vars."
+      );
+    }
+    const label = kind === "waiting_for_info" ? "Action needed" : "Update";
+    // eslint-disable-next-line no-console
+    console.log(
+      `\n[DEV ONLY \u2014 not a real email] ${label} on ticket ${ticketRef} for ${vendorName} (${toEmail}):\n${note}\n` +
+        `This only appears in the server console and is never sent to the browser.\n`
+    );
+  }
+
+  async sendTicketAssigned(toEmail: string, agentName: string, ticketRef: string, vendorName: string, reason: string): Promise<void> {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "ConsoleEmailSender cannot run in production. Set EMAIL_MODE=smtp and configure SMTP_* env vars."
+      );
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      `\n[DEV ONLY \u2014 not a real email] Ticket ${ticketRef} assigned to ${agentName} (${toEmail}) \u2014 ${vendorName}: ${reason}\n` +
+        `This only appears in the server console and is never sent to the browser.\n`
+    );
+  }
 }

@@ -75,6 +75,17 @@ export async function updateTicketStatus(id: string, status: Ticket["status"], r
   return ticket;
 }
 
+/** Sends a reply/note without changing ticket status — see app/api/tickets/route.ts's `reply` action. */
+export async function addTicketNote(id: string, note: string): Promise<Ticket | null> {
+  const store = await load();
+  const ticket = store.tickets.find((t) => t.id === id);
+  if (!ticket) return null;
+  ticket.resolutionNote = note;
+  await save(store);
+  await addAuditEntry({ actor: "business_support", action: "ticket_reply_sent", details: `Reply sent on ticket ${id}` });
+  return ticket;
+}
+
 export async function updateTicketAssignee(id: string, assignee: string | null): Promise<Ticket | null> {
   const store = await load();
   const ticket = store.tickets.find((t) => t.id === id);

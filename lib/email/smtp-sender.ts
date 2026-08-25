@@ -56,6 +56,65 @@ export class SmtpEmailSender implements EmailSender {
       text: `Hi ${vendorName},\n\n` + `${note}\n\n` + `Ticket reference: ${ticketRef}\n`,
     });
   }
+
+  async sendTicketUpdate(
+    toEmail: string,
+    vendorName: string,
+    ticketRef: string,
+    note: string,
+    kind: "reply" | "waiting_for_info"
+  ): Promise<void> {
+    const host = requireEnv("SMTP_HOST");
+    const port = Number(requireEnv("SMTP_PORT"));
+    const user = requireEnv("SMTP_USER");
+    const pass = requireEnv("SMTP_PASS");
+    const from = requireEnv("SMTP_FROM");
+
+    const transport = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+
+    const subject =
+      kind === "waiting_for_info"
+        ? `Action needed on your Vendor Query Assistant ticket ${ticketRef}`
+        : `Update on your Vendor Query Assistant ticket ${ticketRef}`;
+
+    await transport.sendMail({
+      from,
+      to: toEmail,
+      subject,
+      text: `Hi ${vendorName},\n\n${note}\n\nTicket reference: ${ticketRef}\n`,
+    });
+  }
+
+  async sendTicketAssigned(toEmail: string, agentName: string, ticketRef: string, vendorName: string, reason: string): Promise<void> {
+    const host = requireEnv("SMTP_HOST");
+    const port = Number(requireEnv("SMTP_PORT"));
+    const user = requireEnv("SMTP_USER");
+    const pass = requireEnv("SMTP_PASS");
+    const from = requireEnv("SMTP_FROM");
+
+    const transport = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+
+    await transport.sendMail({
+      from,
+      to: toEmail,
+      subject: `Ticket ${ticketRef} assigned to you`,
+      text:
+        `Hi ${agentName},\n\n` +
+        `Ticket ${ticketRef} (${vendorName}) has been assigned to you.\n\n` +
+        `${reason}\n\n` +
+        `Open the Business Support dashboard to respond.\n`,
+    });
+  }
 }
 
 function requireEnv(name: string): string {
