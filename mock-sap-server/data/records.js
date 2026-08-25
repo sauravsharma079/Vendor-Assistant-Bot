@@ -9,7 +9,7 @@ const suppliers = [
     gstin: "27AABCB1234C1Z5",
     plant: "Plant 1000 - Pune",
     category: "Raw Material",
-    email: "sauravsharma079+bharatsteel@gmail.com",
+    email: "demotesting465@gmail.com",
   },
   {
     vendorCode: "100002",
@@ -18,7 +18,7 @@ const suppliers = [
     gstin: "27AAECP5678D1Z2",
     plant: "Plant 1000 - Pune",
     category: "Tooling",
-    email: "sauravsharma079+precisiontooling@gmail.com",
+    email: "demotesting465@gmail.com",
   },
   {
     vendorCode: "100003",
@@ -27,7 +27,7 @@ const suppliers = [
     gstin: "24AABCS9012E1Z8",
     plant: "Plant 2000 - Ahmedabad",
     category: "Packaging",
-    email: "sauravsharma079+safepack@gmail.com",
+    email: "demotesting465@gmail.com",
   },
   {
     vendorCode: "100004",
@@ -36,7 +36,7 @@ const suppliers = [
     gstin: "29AAACA3456F1Z3",
     plant: "Plant 3000 - Bengaluru",
     category: "Components",
-    email: "sauravsharma079+apexauto@gmail.com",
+    email: "demotesting465@gmail.com",
   },
   {
     vendorCode: "100005",
@@ -45,7 +45,7 @@ const suppliers = [
     gstin: "27AAFCR7890G1Z1",
     plant: "Plant 1000 - Pune",
     category: "Machining / MRO",
-    email: "sauravsharma079+reliablemro@gmail.com",
+    email: "demotesting465@gmail.com",
   },
 ];
 

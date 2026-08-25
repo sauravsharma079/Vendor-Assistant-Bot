@@ -111,7 +111,10 @@ function buildAdditionalDataset() {
       gstin,
       plant: plant.name,
       category: category.name,
-      email: "info@veltriance.com",
+      // First six suppliers overall (the 5 curated ones + this loop's
+      // first, vendorCode 100006) go to demotesting465@gmail.com; every
+      // other generated vendor goes to ai.invoices07@gmail.com.
+      email: i === 0 ? "demotesting465@gmail.com" : "ai.invoices07@gmail.com",
     });
 
     const unitPrice = randInt(500, 15000);
