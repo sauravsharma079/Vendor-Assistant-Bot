@@ -1,4 +1,5 @@
 import type { EmailSender } from "./types";
+import { appBaseUrl } from "../app-url";
 
 /**
  * Prints the OTP to the server console instead of emailing it. This is
@@ -64,6 +65,7 @@ export class ConsoleEmailSender implements EmailSender {
     // eslint-disable-next-line no-console
     console.log(
       `\n[DEV ONLY \u2014 not a real email] Ticket ${ticketRef} assigned to ${agentName} (${toEmail}) \u2014 ${vendorName}: ${reason}\n` +
+        `Business Support: ${appBaseUrl()}/admin\n` +
         `This only appears in the server console and is never sent to the browser.\n`
     );
   }

@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import type { EmailSender } from "./types";
+import { appBaseUrl } from "../app-url";
 
 /**
  * Sends OTP codes over real SMTP. Requires SMTP_HOST/PORT/USER/PASS and
@@ -112,7 +113,7 @@ export class SmtpEmailSender implements EmailSender {
         `Hi ${agentName},\n\n` +
         `Ticket ${ticketRef} (${vendorName}) has been assigned to you.\n\n` +
         `${reason}\n\n` +
-        `Open the Business Support dashboard to respond.\n`,
+        `Open the Business Support dashboard to respond: ${appBaseUrl()}/admin\n`,
     });
   }
 }
